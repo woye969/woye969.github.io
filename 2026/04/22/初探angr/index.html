@@ -1,0 +1,841 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>Ro0t's Blog | Ro0t's Blog</title><meta name="author" content="Ro0t"><meta name="copyright" content="Ro0t"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="初探Angr -–title: 初探Angrdate: 2026-04-22tags:  - angr  - reverse  - CTFcategories:  - Reverse-–  这篇笔记不是“命令速查表”，而是把 angr 真正常用的知识串起来：为什么它能解题、对象之间是什么关系、什么时候该符号化、什么时候该 hook、什么时候该先跑到关键点再补约束。 适用方向：CTF Reverse">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Ro0t&#39;s Blog">
+<meta property="og:url" content="http://example.com/2026/04/22/%E5%88%9D%E6%8E%A2angr/index.html">
+<meta property="og:site_name" content="Ro0t&#39;s Blog">
+<meta property="og:description" content="初探Angr -–title: 初探Angrdate: 2026-04-22tags:  - angr  - reverse  - CTFcategories:  - Reverse-–  这篇笔记不是“命令速查表”，而是把 angr 真正常用的知识串起来：为什么它能解题、对象之间是什么关系、什么时候该符号化、什么时候该 hook、什么时候该先跑到关键点再补约束。 适用方向：CTF Reverse">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://example.com/img/re.jpg">
+<meta property="article:published_time" content="2026-04-22T13:45:35.098Z">
+<meta property="article:modified_time" content="2026-04-22T14:08:26.446Z">
+<meta property="article:author" content="Ro0t">
+<meta property="article:tag" content="CTF, Reverse, Pwn, Binary, Exploit">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/img/re.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "",
+  "url": "http://example.com/2026/04/22/%E5%88%9D%E6%8E%A2angr/",
+  "image": "http://example.com/img/re.jpg",
+  "datePublished": "2026-04-22T13:45:35.098Z",
+  "dateModified": "2026-04-22T14:08:26.446Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ro0t",
+      "url": "http://example.com"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="http://example.com/2026/04/22/%E5%88%9D%E6%8E%A2angr/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          const mediaQueryDark = window.matchMedia('(prefers-color-scheme: dark)')
+          const mediaQueryLight = window.matchMedia('(prefers-color-scheme: light)')
+
+          if (theme === undefined) {
+            if (mediaQueryLight.matches) activateLightMode()
+            else if (mediaQueryDark.matches) activateDarkMode()
+            else {
+              const hour = new Date().getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            mediaQueryDark.addEventListener('change', () => {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else {
+            theme === 'light' ? activateLightMode() : activateDarkMode()
+          }
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'Ro0t\'s Blog',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 8.1.1"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">2</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">0</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">0</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/re.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Ro0t's Blog</span></a><a class="nav-page-title" href="/"><span class="site-name">Ro0t's Blog</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">无标题</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-04-22T13:45:35.098Z" title="发表于 2026-04-22 21:45:35">2026-04-22</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-04-22T14:08:26.446Z" title="更新于 2026-04-22 22:08:26">2026-04-22</time></span></div><div class="meta-secondline"></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h1 id="初探Angr"><a href="#初探Angr" class="headerlink" title="初探Angr"></a>初探Angr</h1><hr>
+<p>-–<br>title: 初探Angr<br>date: 2026-04-22<br>tags:<br>  - angr<br>  - reverse<br>  - CTF<br>categories:<br>  - Reverse<br>-–</p>
+<blockquote>
+<p>这篇笔记不是“命令速查表”，而是把 angr 真正常用的知识串起来：<br>为什么它能解题、对象之间是什么关系、什么时候该符号化、什么时候该 hook、什么时候该先跑到关键点再补约束。</p>
+<p>适用方向：CTF Reverse、部分 Pwn、自动化求解校验逻辑。</p>
+</blockquote>
+<h2 id="1-angr-到底在干什么"><a href="#1-angr-到底在干什么" class="headerlink" title="1. angr 到底在干什么"></a>1. angr 到底在干什么</h2><p>很多人第一次接触 angr，会把它理解成“自动跑出 flag 的工具”。<br>这种理解太浅了</p>
+<p>angr 的核心其实是：</p>
+<ul>
+<li><strong>符号执行（Symbolic Execution）</strong></li>
+<li><strong>约束求解（Constraint Solving）</strong></li>
+<li><strong>程序状态建模（Program State Modeling）</strong></li>
+</ul>
+<p>它不是在“瞎跑”，而是在模拟程序执行时，把一部分输入设成<strong>符号变量</strong>，然后在每条路径上不断收集约束，最后交给求解器算出满足条件的输入。</p>
+<p>例如程序里有这样的逻辑：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (x + <span class="number">3</span> == <span class="number">10</span>) &#123;</span><br><span class="line">    success();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>如果 <code>x</code> 是普通整数，那程序只能拿某个具体值执行一次。<br>但如果 <code>x</code> 被符号化成“未知变量”，angr 在走到这个分支时就会得到一个约束：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x + 3 == 10</span><br></pre></td></tr></table></figure>
+
+<p>再把这个约束交给 solver，最后得到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x = 7</span><br></pre></td></tr></table></figure>
+
+<p>所以 angr 的本质不是“爆破”，而是：</p>
+<blockquote>
+<p><strong>把程序逻辑翻译成数学约束，再反推出输入。</strong></p>
+</blockquote>
+<hr>
+<h2 id="2-solver-是-angr-背后的大脑"><a href="#2-solver-是-angr-背后的大脑" class="headerlink" title="2. solver 是 angr 背后的大脑"></a>2. solver 是 angr 背后的大脑</h2><ul>
+<li>angr 背后主要原理就是 solver</li>
+<li>Z3 也是其中一种</li>
+</ul>
+<p>在 angr 里，真正负责“算答案”的不是执行器，而是 <strong>solver</strong>。<br>常见底层求解器就是 <strong>Z3</strong>。</p>
+<p>你可以把 angr 看成两层：</p>
+<h3 id="上层：程序语义模拟"><a href="#上层：程序语义模拟" class="headerlink" title="上层：程序语义模拟"></a>上层：程序语义模拟</h3><p>负责：</p>
+<ul>
+<li>模拟寄存器</li>
+<li>模拟内存</li>
+<li>模拟栈</li>
+<li>模拟文件系统</li>
+<li>管理执行路径</li>
+</ul>
+<h3 id="下层：约束求解"><a href="#下层：约束求解" class="headerlink" title="下层：约束求解"></a>下层：约束求解</h3><p>负责：</p>
+<ul>
+<li>判断某个路径是否可达</li>
+<li>判断某组条件是否矛盾</li>
+<li>求出符号变量的具体值</li>
+</ul>
+<p>所以 angr 并不是“只会跑程序”，它更像是：</p>
+<blockquote>
+<p><strong>执行引擎 + 数学求解器的组合体</strong></p>
+</blockquote>
+<p>也正因为如此，angr 非常适合处理：</p>
+<ul>
+<li>输入校验</li>
+<li>多分支迷宫</li>
+<li>算法校验函数</li>
+<li>某些字符串变换与比较</li>
+<li>可以转成位运算约束的问题</li>
+</ul>
+<hr>
+<h2 id="3-angr-Project：整个程序的抽象入口"><a href="#3-angr-Project：整个程序的抽象入口" class="headerlink" title="3. angr.Project：整个程序的抽象入口"></a>3. <code>angr.Project</code>：整个程序的抽象入口</h2><p>我对 <code>Project</code> 的理解是“整个程序的抽象”</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> angr</span><br><span class="line">p = angr.Project(<span class="string">&#x27;./00_angr_find&#x27;</span>)</span><br></pre></td></tr></table></figure>
+
+<h3 id="Project-负责什么"><a href="#Project-负责什么" class="headerlink" title="Project 负责什么"></a><code>Project</code> 负责什么</h3><p>它不是单纯“打开一个文件”，而是把整个二进制程序包装成 angr 可以分析的对象。它负责：</p>
+<ul>
+<li>加载 ELF &#x2F; PE &#x2F; Mach-O</li>
+<li>识别架构（x86 &#x2F; x64 &#x2F; ARM 等）</li>
+<li>解析段、节、符号、入口点</li>
+<li>初始化 loader</li>
+<li>提供 <code>factory</code> 来创建各种状态对象</li>
+</ul>
+<p>常见属性：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">p.arch          <span class="comment"># 当前程序架构</span></span><br><span class="line">p.entry         <span class="comment"># 程序入口地址</span></span><br><span class="line">p.loader        <span class="comment"># loader 对象</span></span><br><span class="line">p.factory       <span class="comment"># 用来创建 state / simgr / block 等</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="常见构造参数"><a href="#常见构造参数" class="headerlink" title="常见构造参数"></a>常见构造参数</h3><p>实际做题时，经常会见到：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">p = angr.Project(<span class="string">&#x27;./challenge&#x27;</span>, auto_load_libs=<span class="literal">False</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这里的 <code>auto_load_libs=False</code> 很常见。</p>
+<p>因为如果把 libc 等共享库全加载进来：</p>
+<ul>
+<li>状态更多</li>
+<li>路径更多</li>
+<li>分析更慢</li>
+<li>还容易把注意力带偏</li>
+</ul>
+<p>所以 CTF 里通常先关掉自动加载库，除非题目逻辑真的依赖外部库行为。</p>
+<hr>
+<h2 id="4-state：程序某一时刻的完整快照"><a href="#4-state：程序某一时刻的完整快照" class="headerlink" title="4. state：程序某一时刻的完整快照"></a>4. <code>state</code>：程序某一时刻的完整快照</h2><p>我对angr本质的理解</p>
+<ul>
+<li><code>state = 程序某一时刻的完整快照</code></li>
+<li>里面有寄存器、内存、栈、stdin&#x2F;stdout、solver、执行历史</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">init = p.factory.entry_state()</span><br></pre></td></tr></table></figure>
+
+<h3 id="一个-state-里有什么"><a href="#一个-state-里有什么" class="headerlink" title="一个 state 里有什么"></a>一个 state 里有什么</h3><p>一个 <code>state</code> 可以理解成“程序在这一瞬间的世界全貌”，至少包括：</p>
+<ul>
+<li><strong>寄存器状态</strong>：<code>eax / ebx / rsp / rip ...</code></li>
+<li><strong>内存状态</strong>：某地址里现在存了什么</li>
+<li><strong>栈状态</strong>：栈帧如何组织</li>
+<li><strong>文件描述符状态</strong>：stdin &#x2F; stdout &#x2F; stderr</li>
+<li><strong>路径约束</strong>：当前路径要求满足哪些条件</li>
+<li><strong>执行历史</strong>：从哪走到哪</li>
+<li><strong>插件信息</strong>：如 posix、memory、solver、globals 等</li>
+</ul>
+<p>这意味着：</p>
+<blockquote>
+<p>angr 不是“只记住当前地址”，而是把程序执行环境整个建模出来。</p>
+</blockquote>
+<h3 id="常见创建方式"><a href="#常见创建方式" class="headerlink" title="常见创建方式"></a>常见创建方式</h3><h4 id="4-1-entry-state"><a href="#4-1-entry-state" class="headerlink" title="4.1 entry_state()"></a>4.1 <code>entry_state()</code></h4><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state = p.factory.entry_state()</span><br></pre></td></tr></table></figure>
+
+<p>从程序正常入口开始。</p>
+<p>适合：</p>
+<ul>
+<li>想完整模拟程序启动流程</li>
+<li>程序逻辑不复杂</li>
+<li>输入从 stdin 开始读</li>
+</ul>
+<h4 id="4-2-blank-state-addr"><a href="#4-2-blank-state-addr" class="headerlink" title="4.2 blank_state(addr=...)"></a>4.2 <code>blank_state(addr=...)</code></h4><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state = p.factory.blank_state(addr=start_addr)</span><br></pre></td></tr></table></figure>
+
+<p>从你指定的地址直接开始。</p>
+<p>适合：</p>
+<ul>
+<li>你只关心某个函数</li>
+<li>前面初始化过程太麻烦</li>
+<li>想手动布置寄存器和内存</li>
+</ul>
+<h4 id="4-3-call-state"><a href="#4-3-call-state" class="headerlink" title="4.3 call_state()"></a>4.3 <code>call_state()</code></h4><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state = p.factory.call_state(func_addr, arg1, arg2)</span><br></pre></td></tr></table></figure>
+
+<p>直接构造一次“调用函数”的状态。</p>
+<p>适合：</p>
+<ul>
+<li>单独分析某个 check 函数</li>
+<li>想按函数调用约定传参</li>
+<li>不想自己搭栈</li>
+</ul>
+<h3 id="为什么-blank-state-很常见"><a href="#为什么-blank-state-很常见" class="headerlink" title="为什么 blank_state 很常见"></a>为什么 <code>blank_state</code> 很常见</h3><p>很多题如果从入口跑：</p>
+<ul>
+<li>初始化太长</li>
+<li>有无关逻辑</li>
+<li>有反调试</li>
+<li>有复杂 IO</li>
+</ul>
+<p>这时就会直接从 check 函数前面起步，然后自己把输入塞到内存、寄存器或栈里。</p>
+<hr>
+<h2 id="5-simulation-manager：路径管理器"><a href="#5-simulation-manager：路径管理器" class="headerlink" title="5. simulation_manager：路径管理器"></a>5. <code>simulation_manager</code>：路径管理器</h2><p>我把他概括成：</p>
+<ul>
+<li>用来管理多个执行路径</li>
+<li>处理分支</li>
+<li>简称 <code>simgr</code> 或 <code>sm</code></li>
+</ul>
+<p>这也是 angr 里必须会的核心对象。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">simgr = p.factory.simulation_manager(state)</span><br></pre></td></tr></table></figure>
+
+<p>当程序遇到分支，比如：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (a == <span class="number">1</span>) &#123;</span><br><span class="line">    ...</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>如果 <code>a</code> 是符号变量，那么 angr 不知道它究竟是 1 还是不是 1，于是就会把路径拆开：</p>
+<ul>
+<li>一条假设 <code>a == 1</code></li>
+<li>一条假设 <code>a != 1</code></li>
+</ul>
+<p><code>simgr</code> 就是专门管理这些状态集合的。</p>
+<h3 id="常见-stash"><a href="#常见-stash" class="headerlink" title="常见 stash"></a>常见 stash</h3><p><code>simgr</code> 内部一般会有几个列表（stash）：</p>
+<ul>
+<li><code>active</code>：当前还在继续跑的状态</li>
+<li><code>found</code>：满足 <code>find</code> 条件的状态</li>
+<li><code>avoid</code>：命中 <code>avoid</code> 条件的状态</li>
+<li><code>deadended</code>：正常跑完了但没继续</li>
+<li><code>errored</code>：执行时出错的状态</li>
+</ul>
+<p>最常见的是：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">simgr.found[<span class="number">0</span>]</span><br></pre></td></tr></table></figure>
+
+<p>表示你找到的第一条成功路径。</p>
+<h3 id="常见操作"><a href="#常见操作" class="headerlink" title="常见操作"></a>常见操作</h3><h4 id="单步执行"><a href="#单步执行" class="headerlink" title="单步执行"></a>单步执行</h4><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">simgr.step()</span><br></pre></td></tr></table></figure>
+
+<p>把所有 active 状态往前执行一步。</p>
+<h4 id="自动搜索"><a href="#自动搜索" class="headerlink" title="自动搜索"></a>自动搜索</h4><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">simgr.explore(find=<span class="number">0x401234</span>, avoid=<span class="number">0x401111</span>)</span><br></pre></td></tr></table></figure>
+
+<p>自动往前跑，直到：</p>
+<ul>
+<li>找到目标</li>
+<li>全部状态结束</li>
+<li>或被 avoid 剪掉</li>
+</ul>
+<hr>
+<h2 id="6-explore-不是魔法，而是“带目标的路径搜索”"><a href="#6-explore-不是魔法，而是“带目标的路径搜索”" class="headerlink" title="6. explore 不是魔法，而是“带目标的路径搜索”"></a>6. <code>explore</code> 不是魔法，而是“带目标的路径搜索”</h2><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sm.explore(find=<span class="number">0x080492F3</span>)</span><br></pre></td></tr></table></figure>
+
+<p>本质相当于不停 <code>step()</code>，直到有状态到达目标地址</p>
+<h3 id="find-和-avoid-的真正意义"><a href="#find-和-avoid-的真正意义" class="headerlink" title="find 和 avoid 的真正意义"></a><code>find</code> 和 <code>avoid</code> 的真正意义</h3><h4 id="find"><a href="#find" class="headerlink" title="find"></a><code>find</code></h4><p>表示“我想要的状态”。</p>
+<p>可以是：</p>
+<ul>
+<li>某个地址</li>
+<li>一个函数（输入 state，返回 True&#x2F;False）</li>
+</ul>
+<h4 id="avoid"><a href="#avoid" class="headerlink" title="avoid"></a><code>avoid</code></h4><p>表示“我不想走进的状态”。</p>
+<p>可以是：</p>
+<ul>
+<li>失败分支地址</li>
+<li>崩溃地址</li>
+<li>输出里出现错误字符串的状态</li>
+</ul>
+<p>例如：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">is_success</span>(<span class="params">s</span>):</span><br><span class="line">    out = s.posix.dumps(<span class="number">1</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="string">b&quot;Good Job.&quot;</span> <span class="keyword">in</span> out</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">is_fail</span>(<span class="params">s</span>):</span><br><span class="line">    out = s.posix.dumps(<span class="number">1</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="string">b&quot;Try again.&quot;</span> <span class="keyword">in</span> out</span><br><span class="line"></span><br><span class="line">simgr.explore(find=is_success, avoid=is_fail)</span><br></pre></td></tr></table></figure>
+
+<p>这比纯地址更灵活，因为有时你根本不容易定位到成功块地址，但你能识别输出</p>
+<h3 id="angr-不一定要“直接找到最终成功”"><a href="#angr-不一定要“直接找到最终成功”" class="headerlink" title="angr 不一定要“直接找到最终成功”"></a>angr 不一定要“直接找到最终成功”</h3><p>这是很多初学者容易忽略的地方：</p>
+<blockquote>
+<p>angr 的目的不一定是直接到 success，也可以先到某个关键分析点，再手工补约束，再求输入</p>
+</blockquote>
+<p>这在实战里非常常见。</p>
+<p>比如：</p>
+<ul>
+<li>先跑到比较前一行</li>
+<li>把待比较内存读出来</li>
+<li>手动加 <code>== desired</code> 的约束</li>
+<li>再反推出原输入</li>
+</ul>
+<p>这通常比盲目追 success 更稳。</p>
+<hr>
+<h2 id="7-如何从成功状态里拿出答案"><a href="#7-如何从成功状态里拿出答案" class="headerlink" title="7. 如何从成功状态里拿出答案"></a>7. 如何从成功状态里拿出答案</h2><p>我有两种思路：</p>
+<ul>
+<li><code>posix.dumps(0)</code> 直接取 stdin</li>
+<li><code>solver.eval(...)</code> 求某些符号变量的值</li>
+</ul>
+<p>这两种都很常用，但用法场景不同。</p>
+<h3 id="7-1-从标准输入里直接取"><a href="#7-1-从标准输入里直接取" class="headerlink" title="7.1 从标准输入里直接取"></a>7.1 从标准输入里直接取</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">found = simgr.found[<span class="number">0</span>]</span><br><span class="line"><span class="built_in">print</span>(found.posix.dumps(<span class="number">0</span>))</span><br></pre></td></tr></table></figure>
+
+<p>这里：</p>
+<ul>
+<li><code>0</code> 表示 stdin</li>
+<li><code>1</code> 表示 stdout</li>
+<li><code>2</code> 表示 stderr</li>
+</ul>
+<p>适合场景：</p>
+<ul>
+<li>输入是从 stdin 读的</li>
+<li>你让 angr 符号化了标准输入</li>
+</ul>
+<h3 id="7-2-直接求符号变量"><a href="#7-2-直接求符号变量" class="headerlink" title="7.2 直接求符号变量"></a>7.2 直接求符号变量</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">password1 = found.solver.<span class="built_in">eval</span>(pass1)</span><br><span class="line">password2 = found.solver.<span class="built_in">eval</span>(pass2)</span><br><span class="line">password3 = found.solver.<span class="built_in">eval</span>(pass3)</span><br></pre></td></tr></table></figure>
+
+<p>这个意思是：</p>
+<blockquote>
+<p>在当前这条成功路径的所有约束下，分别求 <code>pass1/pass2/pass3</code> 的一个可行解。</p>
+</blockquote>
+<p>适合场景：</p>
+<ul>
+<li>你的输入不是整段 stdin</li>
+<li>你手工创建了多个符号变量</li>
+<li>变量分别塞在寄存器、栈或内存里</li>
+</ul>
+<h3 id="7-3-eval-和-eval-upto"><a href="#7-3-eval-和-eval-upto" class="headerlink" title="7.3 eval 和 eval_upto"></a>7.3 <code>eval</code> 和 <code>eval_upto</code></h3><p>有时一个变量不止一个可行解。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">found.solver.eval_upto(x, <span class="number">10</span>)</span><br></pre></td></tr></table></figure>
+
+<p>表示最多拿 10 个可行值。</p>
+<p>如果只 <code>eval(x)</code>，默认只取一个。</p>
+<h3 id="7-4-把位向量变成字节串"><a href="#7-4-把位向量变成字节串" class="headerlink" title="7.4 把位向量变成字节串"></a>7.4 把位向量变成字节串</h3><p>如果变量本身是 bitvector，常见写法是：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">result = found.solver.<span class="built_in">eval</span>(sym, cast_to=<span class="built_in">bytes</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这对字符串类输入很常见。</p>
+<hr>
+<h2 id="8-claripy：符号表达式层"><a href="#8-claripy：符号表达式层" class="headerlink" title="8. claripy：符号表达式层"></a>8. <code>claripy</code>：符号表达式层</h2><ul>
+<li><code>claripy.BVS(&#39;pass1&#39;, 32)</code></li>
+<li><code>BVS</code> 是未知位向量变量。fileciteturn0file0</li>
+</ul>
+<p>这部分一定要真正理解，不然 angr 很容易变成“照抄脚本但不明白”</p>
+<h3 id="8-1-为什么是位向量，不是普通整数"><a href="#8-1-为什么是位向量，不是普通整数" class="headerlink" title="8.1 为什么是位向量，不是普通整数"></a>8.1 为什么是位向量，不是普通整数</h3><p>二进制程序里很多运算都和位宽强相关：</p>
+<ul>
+<li>8 位字符</li>
+<li>32 位寄存器</li>
+<li>64 位地址</li>
+<li>移位</li>
+<li>按位与&#x2F;异或</li>
+<li>溢出</li>
+</ul>
+<p>所以 angr 不用普通 Python int 来描述符号值，而是用 <strong>bitvector</strong>。</p>
+<h3 id="8-2-BVS：Symbolic-BitVector"><a href="#8-2-BVS：Symbolic-BitVector" class="headerlink" title="8.2 BVS：Symbolic BitVector"></a>8.2 <code>BVS</code>：Symbolic BitVector</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x = claripy.BVS(<span class="string">&#x27;x&#x27;</span>, <span class="number">32</span>)</span><br></pre></td></tr></table></figure>
+
+<p>表示：</p>
+<ul>
+<li>名字叫 <code>x</code></li>
+<li>位宽 32</li>
+<li>值未知</li>
+</ul>
+<h3 id="8-3-BVV：Concrete-BitVector"><a href="#8-3-BVV：Concrete-BitVector" class="headerlink" title="8.3 BVV：Concrete BitVector"></a>8.3 <code>BVV</code>：Concrete BitVector</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">y = claripy.BVV(<span class="number">1</span>, <span class="number">32</span>)</span><br></pre></td></tr></table></figure>
+
+<p>表示：</p>
+<ul>
+<li>一个具体常量</li>
+<li>数值为 1</li>
+<li>位宽 32</li>
+</ul>
+<p>区分一下 <code>BVS</code> 和 <code>BVV</code>，这个点非常重要</p>
+<p>一句话概括：</p>
+<ul>
+<li><code>BVS</code>：未知量</li>
+<li><code>BVV</code>：已知常量</li>
+</ul>
+<h3 id="8-4-常见约束写法"><a href="#8-4-常见约束写法" class="headerlink" title="8.4 常见约束写法"></a>8.4 常见约束写法</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">state.add_constraints(x &gt; <span class="number">0</span>)</span><br><span class="line">state.add_constraints(x &lt; <span class="number">10</span>)</span><br><span class="line">state.add_constraints((x &amp; <span class="number">0xff</span>) == <span class="number">0x41</span>)</span><br></pre></td></tr></table></figure>
+
+<p>注意：</p>
+<p>这里不是在做普通 Python 判断，而是在构造符号约束表达式</p>
+<hr>
+<h2 id="9-把符号变量塞进程序：寄存器、栈、内存"><a href="#9-把符号变量塞进程序：寄存器、栈、内存" class="headerlink" title="9. 把符号变量塞进程序：寄存器、栈、内存"></a>9. 把符号变量塞进程序：寄存器、栈、内存</h2><p>angr 解题的核心动作之一，就是：</p>
+<blockquote>
+<p><strong>把“未知输入”放到程序会读取的地方。</strong></p>
+</blockquote>
+<p>这个地方可能是：</p>
+<ul>
+<li>寄存器</li>
+<li>栈</li>
+<li>某个缓冲区</li>
+<li>某个全局变量</li>
+<li>文件内容</li>
+</ul>
+<h3 id="9-1-塞进寄存器"><a href="#9-1-塞进寄存器" class="headerlink" title="9.1 塞进寄存器"></a>9.1 塞进寄存器</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pass1 = claripy.BVS(<span class="string">&#x27;pass1&#x27;</span>, <span class="number">32</span>)</span><br><span class="line">init.regs.eax = pass1</span><br></pre></td></tr></table></figure>
+
+<p>意思就是：</p>
+<ul>
+<li>把 <code>eax</code> 设成一个 32 位符号变量</li>
+<li>后续程序如果读 <code>eax</code>，读到的就是“未知输入”</li>
+</ul>
+<p>这适合：</p>
+<ul>
+<li>从某函数中途开始</li>
+<li>参数在寄存器中传递（x64 很常见）</li>
+</ul>
+<h3 id="9-2-塞进内存"><a href="#9-2-塞进内存" class="headerlink" title="9.2 塞进内存"></a>9.2 塞进内存</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">p1 = claripy.BVS(<span class="string">&#x27;p1&#x27;</span>, <span class="number">64</span>)</span><br><span class="line">state.memory.store(p1_addr, p1)</span><br></pre></td></tr></table></figure>
+
+<p>表示把符号变量写进某个固定地址。</p>
+<p>适合：</p>
+<ul>
+<li><code>.data</code> &#x2F; <code>.bss</code> &#x2F; 堆上某缓冲区</li>
+<li>程序后面会从这个地址读数据</li>
+</ul>
+<h3 id="9-3-读出内存内容再加约束"><a href="#9-3-读出内存内容再加约束" class="headerlink" title="9.3 读出内存内容再加约束"></a>9.3 读出内存内容再加约束</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">check_bvs = found_state.memory.load(password1, password2)</span><br><span class="line">check_constraint = check_bvs == desire_str</span><br><span class="line">found_state.add_constraints(check_constraint)</span><br></pre></td></tr></table></figure>
+
+<p>这个套路的意思是：</p>
+<ol>
+<li>先让程序跑到关键检查点</li>
+<li>在那个时刻读出将要参与比较的内存</li>
+<li>再手动要求它等于目标值</li>
+<li>最后反求原始输入</li>
+</ol>
+<p>这在逆向题里特别好用，因为：</p>
+<ul>
+<li>你不一定需要把整个 check 跑完</li>
+<li>只要跑到关键比较前就够了</li>
+<li>后面复杂运算可以自己接管</li>
+</ul>
+<h3 id="9-4-直接符号化内存-vs-间接符号化内存"><a href="#9-4-直接符号化内存-vs-间接符号化内存" class="headerlink" title="9.4 直接符号化内存 vs 间接符号化内存"></a>9.4 直接符号化内存 vs 间接符号化内存</h3><p>区分两个概念对理解angr非常有帮助</p>
+<h4 id="直接符号化内存"><a href="#直接符号化内存" class="headerlink" title="直接符号化内存"></a>直接符号化内存</h4><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.memory.store(buf_addr, sym_input)</span><br></pre></td></tr></table></figure>
+
+<p>表示某地址里直接放输入内容。</p>
+<h4 id="间接符号化内存"><a href="#间接符号化内存" class="headerlink" title="间接符号化内存"></a>间接符号化内存</h4><p>先放一个指针，再在指针指向的区域里放真正内容：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">state.memory.store(buffer1_addr, buffer1, endness=p.arch.memory_endness)</span><br><span class="line">state.memory.store(buffer1, p1)</span><br></pre></td></tr></table></figure>
+
+<p>这种情况常见于：</p>
+<ul>
+<li><code>char *argv[]</code></li>
+<li><code>char **</code></li>
+<li>指针数组</li>
+<li>多级引用</li>
+</ul>
+<h3 id="9-5-endness-为什么重要"><a href="#9-5-endness-为什么重要" class="headerlink" title="9.5 endness 为什么重要"></a>9.5 <code>endness</code> 为什么重要</h3><blockquote>
+<p>写入地址值时必须考虑大小端</p>
+</blockquote>
+<p>因为当你往内存里写的是“地址”“整数”“指针”，而不是普通字节串时，机器需要按架构字节序存放。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.memory.store(addr, value, endness=p.arch.memory_endness)</span><br></pre></td></tr></table></figure>
+
+<p>这个写法本质上是在说：</p>
+<blockquote>
+<p>按当前程序架构的内存字节序去解释和写入这个值。</p>
+</blockquote>
+<hr>
+<h2 id="10-栈帧伪造：从函数内部起步时非常常用"><a href="#10-栈帧伪造：从函数内部起步时非常常用" class="headerlink" title="10. 栈帧伪造：从函数内部起步时非常常用"></a>10. 栈帧伪造：从函数内部起步时非常常用</h2><p>这样一段：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">padding = <span class="number">8</span></span><br><span class="line">init.stack_push(init.regs.ebp)</span><br><span class="line">init.regs.ebp = init.regs.esp</span><br><span class="line">init.regs.esp -= padding</span><br></pre></td></tr></table></figure>
+
+<p>可以理解</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">push ebp</span><br><span class="line">mov  ebp, esp</span><br><span class="line">sub  esp, 8</span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="为什么要伪造栈帧"><a href="#为什么要伪造栈帧" class="headerlink" title="为什么要伪造栈帧"></a>为什么要伪造栈帧</h3><p>如果你不是从程序入口开始，而是从某个函数中途开始，那么 angr 并不知道：</p>
+<ul>
+<li>当前 <code>ebp/rbp</code> 应该是什么</li>
+<li>栈局部变量区应该长什么样</li>
+<li><code>[ebp+8]</code>、<code>[ebp+0xc]</code> 等参数位置该怎么解释</li>
+</ul>
+<p>所以你需要自己把函数执行环境搭出来。</p>
+<h3 id="常见思路"><a href="#常见思路" class="headerlink" title="常见思路"></a>常见思路</h3><h4 id="模拟标准函数前序"><a href="#模拟标准函数前序" class="headerlink" title="模拟标准函数前序"></a>模拟标准函数前序</h4><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">state.stack_push(state.regs.ebp)</span><br><span class="line">state.regs.ebp = state.regs.esp</span><br><span class="line">state.regs.esp -= <span class="number">0x20</span></span><br></pre></td></tr></table></figure>
+
+<p>这样后面如果函数访问：</p>
+<ul>
+<li><code>[ebp-4]</code></li>
+<li><code>[ebp-8]</code></li>
+<li><code>[ebp+8]</code></li>
+</ul>
+<p>就更接近真实调用现场。</p>
+<h3 id="更稳的做法：优先考虑-call-state"><a href="#更稳的做法：优先考虑-call-state" class="headerlink" title="更稳的做法：优先考虑 call_state"></a>更稳的做法：优先考虑 <code>call_state</code></h3><p>如果能直接分析某个函数，很多时候：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state = p.factory.call_state(func_addr, arg1, arg2)</span><br></pre></td></tr></table></figure>
+
+<p>会比手工搭栈更省事。</p>
+<p>但手工搭栈的能力仍然重要，因为有些题：</p>
+<ul>
+<li>调用约定不标准</li>
+<li>中途切入</li>
+<li>混淆严重</li>
+<li>函数前半段不想跑</li>
+</ul>
+<p>这时还是得自己伪造。</p>
+<hr>
+<h2 id="11-符号输入不只来自-stdin：文件系统也能模拟"><a href="#11-符号输入不只来自-stdin：文件系统也能模拟" class="headerlink" title="11. 符号输入不只来自 stdin：文件系统也能模拟"></a>11. 符号输入不只来自 stdin：文件系统也能模拟</h2><p><code>state.fs.insert()</code> 和 <code>SimFile</code></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">simfile = angr.storage.SimFile(file_name, content=password, size=file_size)</span><br><span class="line">state.fs.insert(file_name, simfile)</span><br></pre></td></tr></table></figure>
+
+<h3 id="它在干什么"><a href="#它在干什么" class="headerlink" title="它在干什么"></a>它在干什么</h3><p>如果程序里有：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fopen(<span class="string">&quot;PTRCUWFD.txt&quot;</span>, <span class="string">&quot;rb&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>angr 不会真的去你电脑磁盘找这个文件。<br>它只会去当前状态维护的虚拟文件系统里找。</p>
+<p>所以：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.fs.insert(file_name, simfile)</span><br></pre></td></tr></table></figure>
+
+<p>本质上是在说：</p>
+<blockquote>
+<p>在 angr 的程序世界里，创建一个叫这个名字的文件。</p>
+</blockquote>
+<h3 id="SimFile-的关键参数"><a href="#SimFile-的关键参数" class="headerlink" title="SimFile 的关键参数"></a><code>SimFile</code> 的关键参数</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">simfile = angr.storage.SimFile(</span><br><span class="line">    file_name,</span><br><span class="line">    content=password,</span><br><span class="line">    size=file_size</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>表示：</p>
+<ul>
+<li>文件名：<code>file_name</code></li>
+<li>内容：<code>password</code>（可以是符号变量）</li>
+<li>文件大小：<code>file_size</code></li>
+</ul>
+<p>于是程序读这个文件时，实际上读到的就是你放进去的符号内容:</p>
+<ul>
+<li>程序从文件读输入</li>
+<li>文件内容参与校验</li>
+<li>最终可以直接求出文件应包含什么</li>
+</ul>
+<hr>
+<h2 id="12-Hook：不执行原始代码，而是自己定义语义"><a href="#12-Hook：不执行原始代码，而是自己定义语义" class="headerlink" title="12. Hook：不执行原始代码，而是自己定义语义"></a>12. Hook：不执行原始代码，而是自己定义语义</h2><p>angr hook 总结为：</p>
+<ul>
+<li>把原程序某段代码替换成你自己写的 Python 语义</li>
+<li>不是简单拦截，而是“重写一小段程序语义”</li>
+</ul>
+<p>这个理解非常到位。</p>
+<h3 id="12-1-按地址-hook"><a href="#12-1-按地址-hook" class="headerlink" title="12.1 按地址 hook"></a>12.1 按地址 hook</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@p.hook(<span class="params">check_addr, length=check_skip</span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">my_hook</span>(<span class="params">state</span>):</span><br><span class="line">    ...</span><br></pre></td></tr></table></figure>
+
+<p>表示：</p>
+<ul>
+<li>当程序执行到 <code>check_addr</code></li>
+<li>不再执行真实机器码</li>
+<li>改为执行你写的 Python 逻辑</li>
+<li>并跳过 <code>check_skip</code> 字节原始机器码</li>
+</ul>
+<p><code>length</code> 的单位确实是字节</p>
+<h3 id="为什么要-hook"><a href="#为什么要-hook" class="headerlink" title="为什么要 hook"></a>为什么要 hook</h3><p>因为真实程序里经常有这些让 angr 很难受的东西：</p>
+<ul>
+<li>大循环</li>
+<li>哈希</li>
+<li>加密</li>
+<li>校验轮函数</li>
+<li>复杂 libc 行为</li>
+<li>反调试&#x2F;反符号执行</li>
+</ul>
+<p>这时候你不一定要让 angr 硬啃机器码。<br>更实用的办法往往是：</p>
+<blockquote>
+<p><strong>我知道这段逻辑的语义，所以直接用更短、更干净的 Python&#x2F;claripy 表达出来。</strong></p>
+</blockquote>
+<h3 id="12-2-claripy-If：符号表达式里的条件选择"><a href="#12-2-claripy-If：符号表达式里的条件选择" class="headerlink" title="12.2 claripy.If：符号表达式里的条件选择"></a>12.2 <code>claripy.If</code>：符号表达式里的条件选择</h3><p>你原笔记里有：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">claripy.If(desired == <span class="built_in">input</span>, claripy.BVV(<span class="number">1</span>,<span class="number">32</span>), claripy.BVV(<span class="number">0</span>,<span class="number">32</span>))</span><br></pre></td></tr></table></figure>
+
+<p>这不是普通 Python 的 <code>if</code>，而是：</p>
+<blockquote>
+<p>构造一个“符号条件表达式”</p>
+</blockquote>
+<p>意思是：</p>
+<ul>
+<li>如果 <code>desired == input</code></li>
+<li>结果就是 1</li>
+<li>否则结果就是 0</li>
+</ul>
+<p>适合模拟很多 check 函数返回值。</p>
+<hr>
+<h2 id="13-SimProcedure：按函数语义进行替换"><a href="#13-SimProcedure：按函数语义进行替换" class="headerlink" title="13. SimProcedure：按函数语义进行替换"></a>13. <code>SimProcedure</code>：按函数语义进行替换</h2><p> <code>SimProcedure</code>，这是 angr 进阶里非常实用的能力</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MySimPro</span>(angr.SimProcedure):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">run</span>(<span class="params">self, user_input, user_length</span>):</span><br><span class="line">        input_data = <span class="variable language_">self</span>.state.memory.load(user_input, user_length)</span><br><span class="line">        desired = <span class="string">b&quot;ORSDDWXHZURJRBDH&quot;</span></span><br><span class="line">        <span class="keyword">return</span> claripy.If(</span><br><span class="line">            input_data == desired,</span><br><span class="line">            claripy.BVV(<span class="number">1</span>, <span class="number">32</span>),</span><br><span class="line">            claripy.BVV(<span class="number">0</span>, <span class="number">32</span>)</span><br><span class="line">        )</span><br></pre></td></tr></table></figure>
+
+<h3 id="它和地址-hook-的区别"><a href="#它和地址-hook-的区别" class="headerlink" title="它和地址 hook 的区别"></a>它和地址 hook 的区别</h3><h4 id="地址-hook"><a href="#地址-hook" class="headerlink" title="地址 hook"></a>地址 hook</h4><ul>
+<li>我知道某段机器码地址</li>
+<li>我把这段代码替换掉</li>
+</ul>
+<h4 id="SimProcedure"><a href="#SimProcedure" class="headerlink" title="SimProcedure"></a><code>SimProcedure</code></h4><ul>
+<li>我知道程序要调用某个函数</li>
+<li>我直接提供这个函数在 angr 世界里的“模拟实现”</li>
+</ul>
+<h3 id="怎么挂上去"><a href="#怎么挂上去" class="headerlink" title="怎么挂上去"></a>怎么挂上去</h3><p>常见做法：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">p.hook_symbol(<span class="string">&#x27;strcmp&#x27;</span>, MyStrcmp())</span><br></pre></td></tr></table></figure>
+
+<p>或：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">p.hook(addr, MySimPro())</span><br></pre></td></tr></table></figure>
+
+<h3 id="为什么它很有用"><a href="#为什么它很有用" class="headerlink" title="为什么它很有用"></a>为什么它很有用</h3><p>因为很多题并不难在“主程序逻辑”，而是难在：</p>
+<ul>
+<li>某个库函数太复杂</li>
+<li>某个校验函数执行太慢</li>
+<li>某个函数内部有无关细节</li>
+</ul>
+<p>此时你直接替换函数语义，路径会干净很多。</p>
+<h3 id="run-的参数从哪来"><a href="#run-的参数从哪来" class="headerlink" title="run() 的参数从哪来"></a><code>run()</code> 的参数从哪来</h3><p>你笔记里也指出了这一点：</p>
+<ul>
+<li><code>user_input</code> 和 <code>user_length</code> 不是你随便传的</li>
+<li>是 angr 按调用约定自动提取后传给 <code>run()</code> 的</li>
+</ul>
+<p>这个理解是对的。</p>
+<p>也就是说：</p>
+<blockquote>
+<p><code>SimProcedure.run()</code> 的参数，本质上对应程序真实调用这个函数时会传进来的参数。</p>
+</blockquote>
+<hr>
+<h2 id="14-一条完整的-angr-实战思路"><a href="#14-一条完整的-angr-实战思路" class="headerlink" title="14. 一条完整的 angr 实战思路"></a>14. 一条完整的 angr 实战思路</h2><p>前面是各对象的知识点，现在把它们串起来。</p>
+<h3 id="场景一：标准-stdin-校验题"><a href="#场景一：标准-stdin-校验题" class="headerlink" title="场景一：标准 stdin 校验题"></a>场景一：标准 stdin 校验题</h3><p>适合特征：</p>
+<ul>
+<li>程序读 stdin</li>
+<li>跳 success&#x2F;fail 分支清楚</li>
+<li>没有太复杂的外部依赖</li>
+</ul>
+<p>基本思路：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> angr</span><br><span class="line"><span class="keyword">import</span> claripy</span><br><span class="line"></span><br><span class="line">p = angr.Project(<span class="string">&#x27;./challenge&#x27;</span>, auto_load_libs=<span class="literal">False</span>)</span><br><span class="line">state = p.factory.entry_state()</span><br><span class="line">simgr = p.factory.simulation_manager(state)</span><br><span class="line"></span><br><span class="line">simgr.explore(find=<span class="number">0x401234</span>, avoid=<span class="number">0x401111</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> simgr.found:</span><br><span class="line">    found = simgr.found[<span class="number">0</span>]</span><br><span class="line">    <span class="built_in">print</span>(found.posix.dumps(<span class="number">0</span>))</span><br></pre></td></tr></table></figure>
+
+<h3 id="场景二：只想分析-check-函数"><a href="#场景二：只想分析-check-函数" class="headerlink" title="场景二：只想分析 check 函数"></a>场景二：只想分析 check 函数</h3><p>适合特征：</p>
+<ul>
+<li>已经逆出来 check 函数入口</li>
+<li>不想从 main 开始跑</li>
+<li>参数位置清楚</li>
+</ul>
+<p>思路：</p>
+<ol>
+<li><code>blank_state(addr=func_addr)</code> 或 <code>call_state()</code></li>
+<li>手工构造参数</li>
+<li>符号化输入</li>
+<li>跑到关键比较点</li>
+<li>取值或补约束</li>
+</ol>
+<h3 id="场景三：先跑到关键点，再手动补约束"><a href="#场景三：先跑到关键点，再手动补约束" class="headerlink" title="场景三：先跑到关键点，再手动补约束"></a>场景三：先跑到关键点，再手动补约束</h3><p>适合特征：</p>
+<ul>
+<li>后半段逻辑太复杂</li>
+<li>你已经知道目标比较值</li>
+<li>只想让 angr 帮你“倒推”输入</li>
+</ul>
+<p>思路：</p>
+<ol>
+<li><code>explore(find=check_addr)</code></li>
+<li><code>memory.load()</code> 读出待比较内容</li>
+<li><code>add_constraints(check_bvs == desired)</code></li>
+<li><code>solver.eval(...)</code></li>
+</ol>
+<h3 id="场景四：复杂-check-循环-加密逻辑"><a href="#场景四：复杂-check-循环-加密逻辑" class="headerlink" title="场景四：复杂 check &#x2F; 循环 &#x2F; 加密逻辑"></a>场景四：复杂 check &#x2F; 循环 &#x2F; 加密逻辑</h3><p>适合特征：</p>
+<ul>
+<li>原始机器码执行太慢</li>
+<li>有反调试</li>
+<li>有大量无关计算</li>
+</ul>
+<p>思路：</p>
+<ol>
+<li>找到关键函数或关键代码段</li>
+<li>用 <code>hook</code> 或 <code>SimProcedure</code> 重写</li>
+<li>仅保留关键语义</li>
+<li>再让 angr 走路径</li>
+</ol>
+<hr>
+<h2 id="15-初学-angr-时需要知道的事"><a href="#15-初学-angr-时需要知道的事" class="headerlink" title="15. 初学 angr 时需要知道的事"></a>15. 初学 angr 时需要知道的事</h2><h3 id="15-1-angr-不是全自动神器"><a href="#15-1-angr-不是全自动神器" class="headerlink" title="15.1 angr 不是全自动神器"></a>15.1 angr 不是全自动神器</h3><p>很多题并不是“写 10 行脚本就秒了”。<br>真正效率高的 angr 用法通常是：</p>
+<ul>
+<li>先用 IDA&#x2F;Ghidra 弄清大致流程</li>
+<li>确定从哪里切入最省事</li>
+<li>只对关键输入做符号化</li>
+<li>尽量减少无关路径</li>
+</ul>
+<p>也就是说：</p>
+<blockquote>
+<p>angr 最强的时候，不是替代静态分析，而是配合静态分析。</p>
+</blockquote>
+<h3 id="15-2-不是所有变量都该符号化"><a href="#15-2-不是所有变量都该符号化" class="headerlink" title="15.2 不是所有变量都该符号化"></a>15.2 不是所有变量都该符号化</h3><p>如果你把：</p>
+<ul>
+<li>所有输入</li>
+<li>所有内存</li>
+<li>所有文件内容</li>
+</ul>
+<p>全符号化，路径很容易爆炸。</p>
+<p>更好的策略是：</p>
+<blockquote>
+<p>只符号化真正影响最终校验的那部分。</p>
+</blockquote>
+<h3 id="15-3-“跑到目标点”往往比“全自动到-success”更实用"><a href="#15-3-“跑到目标点”往往比“全自动到-success”更实用" class="headerlink" title="15.3 “跑到目标点”往往比“全自动到 success”更实用"></a>15.3 “跑到目标点”往往比“全自动到 success”更实用</h3><p>这点值得再强调一遍。</p>
+<p>在很多逆向题里：</p>
+<ul>
+<li>直接找 success 太难</li>
+<li>但找到比较前一行很容易</li>
+</ul>
+<p>这时先到关键点，再自己补约束，往往是最稳的打法。</p>
+<h3 id="15-4-hook-不是作弊，而是语义抽象"><a href="#15-4-hook-不是作弊，而是语义抽象" class="headerlink" title="15.4 hook 不是作弊，而是语义抽象"></a>15.4 hook 不是作弊，而是语义抽象</h3><p>很多新手会觉得：</p>
+<blockquote>
+<p>“我 hook 了，不就不是 angr 真跑出来的吗？”</p>
+</blockquote>
+<p>其实不是。</p>
+<p>真正的核心不是“坚持执行原机器码”，而是：</p>
+<blockquote>
+<p><strong>把你已经知道的程序语义告诉 angr，让它把精力花在你还不知道的输入约束上。</strong></p>
+</blockquote>
+<p>这正是符号执行在工程上真正有价值的地方。</p>
+<hr>
+<h2 id="16-一个更完整的-angr-能力图谱"><a href="#16-一个更完整的-angr-能力图谱" class="headerlink" title="16. 一个更完整的 angr 能力图谱"></a>16. 一个更完整的 angr 能力图谱</h2><h3 id="第一层：入门必会"><a href="#第一层：入门必会" class="headerlink" title="第一层：入门必会"></a>第一层：入门必会</h3><ul>
+<li><code>angr.Project</code></li>
+<li><code>entry_state / blank_state / call_state</code></li>
+<li><code>simgr</code></li>
+<li><code>explore(find, avoid)</code></li>
+<li><code>posix.dumps</code></li>
+<li><code>solver.eval</code></li>
+<li><code>claripy.BVS / BVV</code></li>
+</ul>
+<h3 id="第二层：实战开始常用"><a href="#第二层：实战开始常用" class="headerlink" title="第二层：实战开始常用"></a>第二层：实战开始常用</h3><ul>
+<li><code>memory.store / load</code></li>
+<li><code>regs.xxx</code></li>
+<li><code>add_constraints</code></li>
+<li>栈帧伪造</li>
+<li>文件系统模拟</li>
+<li>地址 hook</li>
+</ul>
+<h3 id="第三层：进阶高频"><a href="#第三层：进阶高频" class="headerlink" title="第三层：进阶高频"></a>第三层：进阶高频</h3><ul>
+<li><code>SimProcedure</code></li>
+<li>按符号 hook</li>
+<li>手工约束构造</li>
+<li>函数级切入</li>
+<li>中途状态修补</li>
+</ul>
+<h3 id="第四层：更深入"><a href="#第四层：更深入" class="headerlink" title="第四层：更深入"></a>第四层：更深入</h3><ul>
+<li>路径剪枝策略</li>
+<li>状态合并</li>
+<li>Unicorn 加速</li>
+<li>自定义探索技术</li>
+<li>libc &#x2F; syscall 模拟</li>
+<li>复杂内存模型</li>
+</ul>
+<hr>
+<h2 id="17-总结"><a href="#17-总结" class="headerlink" title="17. 总结"></a>17. 总结</h2><ul>
+<li><code>Project</code> 是程序抽象</li>
+<li><code>state</code> 是执行快照</li>
+<li><code>simgr</code> 管路径</li>
+<li><code>explore</code> 找目标</li>
+<li><code>solver</code> 算约束</li>
+<li><code>claripy</code> 造符号变量</li>
+<li><code>hook / SimProcedure</code> 改写程序语义。</li>
+</ul>
+<p>所以 angr 最核心的一句话可以总结成：</p>
+<blockquote>
+<p><strong>把程序执行过程建模成状态迁移，再把成功路径对应的输入条件交给求解器反解。</strong></p>
+</blockquote>
+<p>如果只把它当成“自动跑 flag 的工具”，你会很快卡住。<br>如果把它当成“程序语义建模 + 约束求解框架”，你就会开始真正会用 angr</p>
+<hr>
+<p><strong>作者：Ro0t</strong><br><strong>方向：Binary &#x2F; Reverse</strong></p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="http://example.com">Ro0t</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="http://example.com/2026/04/22/%E5%88%9D%E6%8E%A2angr/">http://example.com/2026/04/22/%E5%88%9D%E6%8E%A2angr/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="http://example.com" target="_blank">Ro0t's Blog</a>！</span></div></div><div class="tag_share"><div class="post-share"><div class="social-share" data-image="/img/re.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/04/22/hello-world/" title="Hello World"><img class="cover" src="/img/re.jpg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">Hello World</div></div><div class="info-2"><div class="info-item-1">Welcome to Hexo! This is your very first post. Check documentation for more info. If you get any problems when using Hexo, you can find the answer in troubleshooting or you can ask me on GitHub. Quick StartCreate a ne...</div></div></div></a></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Ro0t</div><div class="author-info-description">专注二进制安全、逆向分析与漏洞利用</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">2</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">0</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">0</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/Ro0t" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">This is my Blog</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%88%9D%E6%8E%A2Angr"><span class="toc-number">1.</span> <span class="toc-text">初探Angr</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-angr-%E5%88%B0%E5%BA%95%E5%9C%A8%E5%B9%B2%E4%BB%80%E4%B9%88"><span class="toc-number">1.1.</span> <span class="toc-text">1. angr 到底在干什么</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-solver-%E6%98%AF-angr-%E8%83%8C%E5%90%8E%E7%9A%84%E5%A4%A7%E8%84%91"><span class="toc-number">1.2.</span> <span class="toc-text">2. solver 是 angr 背后的大脑</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%8A%E5%B1%82%EF%BC%9A%E7%A8%8B%E5%BA%8F%E8%AF%AD%E4%B9%89%E6%A8%A1%E6%8B%9F"><span class="toc-number">1.2.1.</span> <span class="toc-text">上层：程序语义模拟</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%8B%E5%B1%82%EF%BC%9A%E7%BA%A6%E6%9D%9F%E6%B1%82%E8%A7%A3"><span class="toc-number">1.2.2.</span> <span class="toc-text">下层：约束求解</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-angr-Project%EF%BC%9A%E6%95%B4%E4%B8%AA%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%8A%BD%E8%B1%A1%E5%85%A5%E5%8F%A3"><span class="toc-number">1.3.</span> <span class="toc-text">3. angr.Project：整个程序的抽象入口</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Project-%E8%B4%9F%E8%B4%A3%E4%BB%80%E4%B9%88"><span class="toc-number">1.3.1.</span> <span class="toc-text">Project 负责什么</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%B8%B8%E8%A7%81%E6%9E%84%E9%80%A0%E5%8F%82%E6%95%B0"><span class="toc-number">1.3.2.</span> <span class="toc-text">常见构造参数</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-state%EF%BC%9A%E7%A8%8B%E5%BA%8F%E6%9F%90%E4%B8%80%E6%97%B6%E5%88%BB%E7%9A%84%E5%AE%8C%E6%95%B4%E5%BF%AB%E7%85%A7"><span class="toc-number">1.4.</span> <span class="toc-text">4. state：程序某一时刻的完整快照</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%80%E4%B8%AA-state-%E9%87%8C%E6%9C%89%E4%BB%80%E4%B9%88"><span class="toc-number">1.4.1.</span> <span class="toc-text">一个 state 里有什么</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%B8%B8%E8%A7%81%E5%88%9B%E5%BB%BA%E6%96%B9%E5%BC%8F"><span class="toc-number">1.4.2.</span> <span class="toc-text">常见创建方式</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#4-1-entry-state"><span class="toc-number">1.4.2.1.</span> <span class="toc-text">4.1 entry_state()</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-2-blank-state-addr"><span class="toc-number">1.4.2.2.</span> <span class="toc-text">4.2 blank_state(addr&#x3D;...)</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-3-call-state"><span class="toc-number">1.4.2.3.</span> <span class="toc-text">4.3 call_state()</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88-blank-state-%E5%BE%88%E5%B8%B8%E8%A7%81"><span class="toc-number">1.4.3.</span> <span class="toc-text">为什么 blank_state 很常见</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-simulation-manager%EF%BC%9A%E8%B7%AF%E5%BE%84%E7%AE%A1%E7%90%86%E5%99%A8"><span class="toc-number">1.5.</span> <span class="toc-text">5. simulation_manager：路径管理器</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%B8%B8%E8%A7%81-stash"><span class="toc-number">1.5.1.</span> <span class="toc-text">常见 stash</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%B8%B8%E8%A7%81%E6%93%8D%E4%BD%9C"><span class="toc-number">1.5.2.</span> <span class="toc-text">常见操作</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E5%8D%95%E6%AD%A5%E6%89%A7%E8%A1%8C"><span class="toc-number">1.5.2.1.</span> <span class="toc-text">单步执行</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E8%87%AA%E5%8A%A8%E6%90%9C%E7%B4%A2"><span class="toc-number">1.5.2.2.</span> <span class="toc-text">自动搜索</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-explore-%E4%B8%8D%E6%98%AF%E9%AD%94%E6%B3%95%EF%BC%8C%E8%80%8C%E6%98%AF%E2%80%9C%E5%B8%A6%E7%9B%AE%E6%A0%87%E7%9A%84%E8%B7%AF%E5%BE%84%E6%90%9C%E7%B4%A2%E2%80%9D"><span class="toc-number">1.6.</span> <span class="toc-text">6. explore 不是魔法，而是“带目标的路径搜索”</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#find-%E5%92%8C-avoid-%E7%9A%84%E7%9C%9F%E6%AD%A3%E6%84%8F%E4%B9%89"><span class="toc-number">1.6.1.</span> <span class="toc-text">find 和 avoid 的真正意义</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#find"><span class="toc-number">1.6.1.1.</span> <span class="toc-text">find</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#avoid"><span class="toc-number">1.6.1.2.</span> <span class="toc-text">avoid</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#angr-%E4%B8%8D%E4%B8%80%E5%AE%9A%E8%A6%81%E2%80%9C%E7%9B%B4%E6%8E%A5%E6%89%BE%E5%88%B0%E6%9C%80%E7%BB%88%E6%88%90%E5%8A%9F%E2%80%9D"><span class="toc-number">1.6.2.</span> <span class="toc-text">angr 不一定要“直接找到最终成功”</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#7-%E5%A6%82%E4%BD%95%E4%BB%8E%E6%88%90%E5%8A%9F%E7%8A%B6%E6%80%81%E9%87%8C%E6%8B%BF%E5%87%BA%E7%AD%94%E6%A1%88"><span class="toc-number">1.7.</span> <span class="toc-text">7. 如何从成功状态里拿出答案</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#7-1-%E4%BB%8E%E6%A0%87%E5%87%86%E8%BE%93%E5%85%A5%E9%87%8C%E7%9B%B4%E6%8E%A5%E5%8F%96"><span class="toc-number">1.7.1.</span> <span class="toc-text">7.1 从标准输入里直接取</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#7-2-%E7%9B%B4%E6%8E%A5%E6%B1%82%E7%AC%A6%E5%8F%B7%E5%8F%98%E9%87%8F"><span class="toc-number">1.7.2.</span> <span class="toc-text">7.2 直接求符号变量</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#7-3-eval-%E5%92%8C-eval-upto"><span class="toc-number">1.7.3.</span> <span class="toc-text">7.3 eval 和 eval_upto</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#7-4-%E6%8A%8A%E4%BD%8D%E5%90%91%E9%87%8F%E5%8F%98%E6%88%90%E5%AD%97%E8%8A%82%E4%B8%B2"><span class="toc-number">1.7.4.</span> <span class="toc-text">7.4 把位向量变成字节串</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#8-claripy%EF%BC%9A%E7%AC%A6%E5%8F%B7%E8%A1%A8%E8%BE%BE%E5%BC%8F%E5%B1%82"><span class="toc-number">1.8.</span> <span class="toc-text">8. claripy：符号表达式层</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#8-1-%E4%B8%BA%E4%BB%80%E4%B9%88%E6%98%AF%E4%BD%8D%E5%90%91%E9%87%8F%EF%BC%8C%E4%B8%8D%E6%98%AF%E6%99%AE%E9%80%9A%E6%95%B4%E6%95%B0"><span class="toc-number">1.8.1.</span> <span class="toc-text">8.1 为什么是位向量，不是普通整数</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#8-2-BVS%EF%BC%9ASymbolic-BitVector"><span class="toc-number">1.8.2.</span> <span class="toc-text">8.2 BVS：Symbolic BitVector</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#8-3-BVV%EF%BC%9AConcrete-BitVector"><span class="toc-number">1.8.3.</span> <span class="toc-text">8.3 BVV：Concrete BitVector</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#8-4-%E5%B8%B8%E8%A7%81%E7%BA%A6%E6%9D%9F%E5%86%99%E6%B3%95"><span class="toc-number">1.8.4.</span> <span class="toc-text">8.4 常见约束写法</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#9-%E6%8A%8A%E7%AC%A6%E5%8F%B7%E5%8F%98%E9%87%8F%E5%A1%9E%E8%BF%9B%E7%A8%8B%E5%BA%8F%EF%BC%9A%E5%AF%84%E5%AD%98%E5%99%A8%E3%80%81%E6%A0%88%E3%80%81%E5%86%85%E5%AD%98"><span class="toc-number">1.9.</span> <span class="toc-text">9. 把符号变量塞进程序：寄存器、栈、内存</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#9-1-%E5%A1%9E%E8%BF%9B%E5%AF%84%E5%AD%98%E5%99%A8"><span class="toc-number">1.9.1.</span> <span class="toc-text">9.1 塞进寄存器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#9-2-%E5%A1%9E%E8%BF%9B%E5%86%85%E5%AD%98"><span class="toc-number">1.9.2.</span> <span class="toc-text">9.2 塞进内存</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#9-3-%E8%AF%BB%E5%87%BA%E5%86%85%E5%AD%98%E5%86%85%E5%AE%B9%E5%86%8D%E5%8A%A0%E7%BA%A6%E6%9D%9F"><span class="toc-number">1.9.3.</span> <span class="toc-text">9.3 读出内存内容再加约束</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#9-4-%E7%9B%B4%E6%8E%A5%E7%AC%A6%E5%8F%B7%E5%8C%96%E5%86%85%E5%AD%98-vs-%E9%97%B4%E6%8E%A5%E7%AC%A6%E5%8F%B7%E5%8C%96%E5%86%85%E5%AD%98"><span class="toc-number">1.9.4.</span> <span class="toc-text">9.4 直接符号化内存 vs 间接符号化内存</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E7%9B%B4%E6%8E%A5%E7%AC%A6%E5%8F%B7%E5%8C%96%E5%86%85%E5%AD%98"><span class="toc-number">1.9.4.1.</span> <span class="toc-text">直接符号化内存</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E9%97%B4%E6%8E%A5%E7%AC%A6%E5%8F%B7%E5%8C%96%E5%86%85%E5%AD%98"><span class="toc-number">1.9.4.2.</span> <span class="toc-text">间接符号化内存</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#9-5-endness-%E4%B8%BA%E4%BB%80%E4%B9%88%E9%87%8D%E8%A6%81"><span class="toc-number">1.9.5.</span> <span class="toc-text">9.5 endness 为什么重要</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#10-%E6%A0%88%E5%B8%A7%E4%BC%AA%E9%80%A0%EF%BC%9A%E4%BB%8E%E5%87%BD%E6%95%B0%E5%86%85%E9%83%A8%E8%B5%B7%E6%AD%A5%E6%97%B6%E9%9D%9E%E5%B8%B8%E5%B8%B8%E7%94%A8"><span class="toc-number">1.10.</span> <span class="toc-text">10. 栈帧伪造：从函数内部起步时非常常用</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E4%BC%AA%E9%80%A0%E6%A0%88%E5%B8%A7"><span class="toc-number">1.10.1.</span> <span class="toc-text">为什么要伪造栈帧</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%B8%B8%E8%A7%81%E6%80%9D%E8%B7%AF"><span class="toc-number">1.10.2.</span> <span class="toc-text">常见思路</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E6%A8%A1%E6%8B%9F%E6%A0%87%E5%87%86%E5%87%BD%E6%95%B0%E5%89%8D%E5%BA%8F"><span class="toc-number">1.10.2.1.</span> <span class="toc-text">模拟标准函数前序</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9B%B4%E7%A8%B3%E7%9A%84%E5%81%9A%E6%B3%95%EF%BC%9A%E4%BC%98%E5%85%88%E8%80%83%E8%99%91-call-state"><span class="toc-number">1.10.3.</span> <span class="toc-text">更稳的做法：优先考虑 call_state</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#11-%E7%AC%A6%E5%8F%B7%E8%BE%93%E5%85%A5%E4%B8%8D%E5%8F%AA%E6%9D%A5%E8%87%AA-stdin%EF%BC%9A%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F%E4%B9%9F%E8%83%BD%E6%A8%A1%E6%8B%9F"><span class="toc-number">1.11.</span> <span class="toc-text">11. 符号输入不只来自 stdin：文件系统也能模拟</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%83%E5%9C%A8%E5%B9%B2%E4%BB%80%E4%B9%88"><span class="toc-number">1.11.1.</span> <span class="toc-text">它在干什么</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#SimFile-%E7%9A%84%E5%85%B3%E9%94%AE%E5%8F%82%E6%95%B0"><span class="toc-number">1.11.2.</span> <span class="toc-text">SimFile 的关键参数</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#12-Hook%EF%BC%9A%E4%B8%8D%E6%89%A7%E8%A1%8C%E5%8E%9F%E5%A7%8B%E4%BB%A3%E7%A0%81%EF%BC%8C%E8%80%8C%E6%98%AF%E8%87%AA%E5%B7%B1%E5%AE%9A%E4%B9%89%E8%AF%AD%E4%B9%89"><span class="toc-number">1.12.</span> <span class="toc-text">12. Hook：不执行原始代码，而是自己定义语义</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#12-1-%E6%8C%89%E5%9C%B0%E5%9D%80-hook"><span class="toc-number">1.12.1.</span> <span class="toc-text">12.1 按地址 hook</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81-hook"><span class="toc-number">1.12.2.</span> <span class="toc-text">为什么要 hook</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#12-2-claripy-If%EF%BC%9A%E7%AC%A6%E5%8F%B7%E8%A1%A8%E8%BE%BE%E5%BC%8F%E9%87%8C%E7%9A%84%E6%9D%A1%E4%BB%B6%E9%80%89%E6%8B%A9"><span class="toc-number">1.12.3.</span> <span class="toc-text">12.2 claripy.If：符号表达式里的条件选择</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#13-SimProcedure%EF%BC%9A%E6%8C%89%E5%87%BD%E6%95%B0%E8%AF%AD%E4%B9%89%E8%BF%9B%E8%A1%8C%E6%9B%BF%E6%8D%A2"><span class="toc-number">1.13.</span> <span class="toc-text">13. SimProcedure：按函数语义进行替换</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%83%E5%92%8C%E5%9C%B0%E5%9D%80-hook-%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="toc-number">1.13.1.</span> <span class="toc-text">它和地址 hook 的区别</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E5%9C%B0%E5%9D%80-hook"><span class="toc-number">1.13.1.1.</span> <span class="toc-text">地址 hook</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#SimProcedure"><span class="toc-number">1.13.1.2.</span> <span class="toc-text">SimProcedure</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%80%8E%E4%B9%88%E6%8C%82%E4%B8%8A%E5%8E%BB"><span class="toc-number">1.13.2.</span> <span class="toc-text">怎么挂上去</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%AE%83%E5%BE%88%E6%9C%89%E7%94%A8"><span class="toc-number">1.13.3.</span> <span class="toc-text">为什么它很有用</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#run-%E7%9A%84%E5%8F%82%E6%95%B0%E4%BB%8E%E5%93%AA%E6%9D%A5"><span class="toc-number">1.13.4.</span> <span class="toc-text">run() 的参数从哪来</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#14-%E4%B8%80%E6%9D%A1%E5%AE%8C%E6%95%B4%E7%9A%84-angr-%E5%AE%9E%E6%88%98%E6%80%9D%E8%B7%AF"><span class="toc-number">1.14.</span> <span class="toc-text">14. 一条完整的 angr 实战思路</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9C%BA%E6%99%AF%E4%B8%80%EF%BC%9A%E6%A0%87%E5%87%86-stdin-%E6%A0%A1%E9%AA%8C%E9%A2%98"><span class="toc-number">1.14.1.</span> <span class="toc-text">场景一：标准 stdin 校验题</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9C%BA%E6%99%AF%E4%BA%8C%EF%BC%9A%E5%8F%AA%E6%83%B3%E5%88%86%E6%9E%90-check-%E5%87%BD%E6%95%B0"><span class="toc-number">1.14.2.</span> <span class="toc-text">场景二：只想分析 check 函数</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9C%BA%E6%99%AF%E4%B8%89%EF%BC%9A%E5%85%88%E8%B7%91%E5%88%B0%E5%85%B3%E9%94%AE%E7%82%B9%EF%BC%8C%E5%86%8D%E6%89%8B%E5%8A%A8%E8%A1%A5%E7%BA%A6%E6%9D%9F"><span class="toc-number">1.14.3.</span> <span class="toc-text">场景三：先跑到关键点，再手动补约束</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9C%BA%E6%99%AF%E5%9B%9B%EF%BC%9A%E5%A4%8D%E6%9D%82-check-%E5%BE%AA%E7%8E%AF-%E5%8A%A0%E5%AF%86%E9%80%BB%E8%BE%91"><span class="toc-number">1.14.4.</span> <span class="toc-text">场景四：复杂 check &#x2F; 循环 &#x2F; 加密逻辑</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#15-%E5%88%9D%E5%AD%A6-angr-%E6%97%B6%E9%9C%80%E8%A6%81%E7%9F%A5%E9%81%93%E7%9A%84%E4%BA%8B"><span class="toc-number">1.15.</span> <span class="toc-text">15. 初学 angr 时需要知道的事</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#15-1-angr-%E4%B8%8D%E6%98%AF%E5%85%A8%E8%87%AA%E5%8A%A8%E7%A5%9E%E5%99%A8"><span class="toc-number">1.15.1.</span> <span class="toc-text">15.1 angr 不是全自动神器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#15-2-%E4%B8%8D%E6%98%AF%E6%89%80%E6%9C%89%E5%8F%98%E9%87%8F%E9%83%BD%E8%AF%A5%E7%AC%A6%E5%8F%B7%E5%8C%96"><span class="toc-number">1.15.2.</span> <span class="toc-text">15.2 不是所有变量都该符号化</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#15-3-%E2%80%9C%E8%B7%91%E5%88%B0%E7%9B%AE%E6%A0%87%E7%82%B9%E2%80%9D%E5%BE%80%E5%BE%80%E6%AF%94%E2%80%9C%E5%85%A8%E8%87%AA%E5%8A%A8%E5%88%B0-success%E2%80%9D%E6%9B%B4%E5%AE%9E%E7%94%A8"><span class="toc-number">1.15.3.</span> <span class="toc-text">15.3 “跑到目标点”往往比“全自动到 success”更实用</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#15-4-hook-%E4%B8%8D%E6%98%AF%E4%BD%9C%E5%BC%8A%EF%BC%8C%E8%80%8C%E6%98%AF%E8%AF%AD%E4%B9%89%E6%8A%BD%E8%B1%A1"><span class="toc-number">1.15.4.</span> <span class="toc-text">15.4 hook 不是作弊，而是语义抽象</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#16-%E4%B8%80%E4%B8%AA%E6%9B%B4%E5%AE%8C%E6%95%B4%E7%9A%84-angr-%E8%83%BD%E5%8A%9B%E5%9B%BE%E8%B0%B1"><span class="toc-number">1.16.</span> <span class="toc-text">16. 一个更完整的 angr 能力图谱</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E4%B8%80%E5%B1%82%EF%BC%9A%E5%85%A5%E9%97%A8%E5%BF%85%E4%BC%9A"><span class="toc-number">1.16.1.</span> <span class="toc-text">第一层：入门必会</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E4%BA%8C%E5%B1%82%EF%BC%9A%E5%AE%9E%E6%88%98%E5%BC%80%E5%A7%8B%E5%B8%B8%E7%94%A8"><span class="toc-number">1.16.2.</span> <span class="toc-text">第二层：实战开始常用</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E4%B8%89%E5%B1%82%EF%BC%9A%E8%BF%9B%E9%98%B6%E9%AB%98%E9%A2%91"><span class="toc-number">1.16.3.</span> <span class="toc-text">第三层：进阶高频</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AC%AC%E5%9B%9B%E5%B1%82%EF%BC%9A%E6%9B%B4%E6%B7%B1%E5%85%A5"><span class="toc-number">1.16.4.</span> <span class="toc-text">第四层：更深入</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#17-%E6%80%BB%E7%BB%93"><span class="toc-number">1.17.</span> <span class="toc-text">17. 总结</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/04/22/%E5%88%9D%E6%8E%A2angr/" title="无标题"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="无标题"/></a><div class="content"><a class="title" href="/2026/04/22/%E5%88%9D%E6%8E%A2angr/" title="无标题">无标题</a><time datetime="2026-04-22T13:45:35.098Z" title="发表于 2026-04-22 21:45:35">2026-04-22</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/22/hello-world/" title="Hello World"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Hello World"/></a><div class="content"><a class="title" href="/2026/04/22/hello-world/" title="Hello World">Hello World</a><time datetime="2026-04-22T12:24:14.697Z" title="发表于 2026-04-22 20:24:14">2026-04-22</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Ro0t</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div><div class="footer_custom_text">Ro0t · Binary Security Blog</div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div></div></body></html>
