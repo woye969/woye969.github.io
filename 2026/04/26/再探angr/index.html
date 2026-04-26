@@ -1,0 +1,710 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>再探Angr | Ro0t's Blog</title><meta name="author" content="Ro0t"><meta name="copyright" content="Ro0t"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="上一篇《初探Angr》里，我主要是把 angr 的几个基础对象讲清楚：Project、state、simulation_manager、claripy、solver、hook、SimProcedure。那篇更像是把工具箱打开，看看里面每个工具叫什么。 这一篇想继续往下走一点：不只会写 explore(find&#x3D;..., avoid&#x3D;...)，而是理解 angr 在实战里到底怎么建模、怎么控制路径、">
+<meta property="og:type" content="article">
+<meta property="og:title" content="再探Angr">
+<meta property="og:url" content="http://example.com/2026/04/26/%E5%86%8D%E6%8E%A2angr/index.html">
+<meta property="og:site_name" content="Ro0t&#39;s Blog">
+<meta property="og:description" content="上一篇《初探Angr》里，我主要是把 angr 的几个基础对象讲清楚：Project、state、simulation_manager、claripy、solver、hook、SimProcedure。那篇更像是把工具箱打开，看看里面每个工具叫什么。 这一篇想继续往下走一点：不只会写 explore(find&#x3D;..., avoid&#x3D;...)，而是理解 angr 在实战里到底怎么建模、怎么控制路径、">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://example.com/img/re.jpg">
+<meta property="article:published_time" content="2026-04-26T13:15:58.515Z">
+<meta property="article:modified_time" content="2026-04-26T13:27:48.307Z">
+<meta property="article:author" content="Ro0t">
+<meta property="article:tag" content="CTF, Reverse, Pwn, Binary, Exploit">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/img/re.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "再探Angr",
+  "url": "http://example.com/2026/04/26/%E5%86%8D%E6%8E%A2angr/",
+  "image": "http://example.com/img/re.jpg",
+  "datePublished": "2026-04-26T13:15:58.515Z",
+  "dateModified": "2026-04-26T13:27:48.307Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ro0t",
+      "url": "http://example.com"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="http://example.com/2026/04/26/%E5%86%8D%E6%8E%A2angr/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          const mediaQueryDark = window.matchMedia('(prefers-color-scheme: dark)')
+          const mediaQueryLight = window.matchMedia('(prefers-color-scheme: light)')
+
+          if (theme === undefined) {
+            if (mediaQueryLight.matches) activateLightMode()
+            else if (mediaQueryDark.matches) activateDarkMode()
+            else {
+              const hour = new Date().getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            mediaQueryDark.addEventListener('change', () => {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else {
+            theme === 'light' ? activateLightMode() : activateDarkMode()
+          }
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '再探Angr',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 8.1.1"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">8</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">3</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/re.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Ro0t's Blog</span></a><a class="nav-page-title" href="/"><span class="site-name">再探Angr</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">再探Angr</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-04-26T13:15:58.515Z" title="发表于 2026-04-26 21:15:58">2026-04-26</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-04-26T13:27:48.307Z" title="更新于 2026-04-26 21:27:48">2026-04-26</time></span></div><div class="meta-secondline"></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><p>上一篇《初探Angr》里，我主要是把 angr 的几个基础对象讲清楚：<code>Project</code>、<code>state</code>、<code>simulation_manager</code>、<code>claripy</code>、<code>solver</code>、<code>hook</code>、<code>SimProcedure</code>。那篇更像是把工具箱打开，看看里面每个工具叫什么。</p>
+<p>这一篇想继续往下走一点：不只会写 <code>explore(find=..., avoid=...)</code>，而是理解 angr 在实战里到底怎么建模、怎么控制路径、怎么处理复杂输入、怎么把漏洞利用条件翻译成约束。</p>
+<p>尤其是 angr_ctf 的 15、16、17 三个 lab，很适合作为进阶案例。它们已经不是普通的“输入密码，然后跑到 Good Job”了，而是把二进制漏洞里的能力抽象成符号执行问题：</p>
+<ul>
+<li>Lab 15：arbitrary read，控制程序读哪里</li>
+<li>Lab 16：arbitrary write，控制程序写哪里</li>
+<li>Lab 17：arbitrary jump，控制程序跳哪里</li>
+</ul>
+<p>这三个题的重点不是某几行脚本，而是思维方式：当程序的指针、参数、返回地址被输入影响时，angr 应该在哪里观察状态，又应该给 solver 加什么约束。</p>
+<hr>
+<h2 id="1-angr-进阶的核心：不是自动跑，而是建模"><a href="#1-angr-进阶的核心：不是自动跑，而是建模" class="headerlink" title="1. angr 进阶的核心：不是自动跑，而是建模"></a>1. angr 进阶的核心：不是自动跑，而是建模</h2><p>很多刚接触 angr 的题都长这样：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> angr</span><br><span class="line"></span><br><span class="line">p = angr.Project(<span class="string">&quot;./challenge&quot;</span>, auto_load_libs=<span class="literal">False</span>)</span><br><span class="line">state = p.factory.entry_state()</span><br><span class="line">simgr = p.factory.simulation_manager(state)</span><br><span class="line"></span><br><span class="line">simgr.explore(find=<span class="number">0x401234</span>, avoid=<span class="number">0x401111</span>)</span><br><span class="line">found = simgr.found[<span class="number">0</span>]</span><br><span class="line"><span class="built_in">print</span>(found.posix.dumps(<span class="number">0</span>))</span><br></pre></td></tr></table></figure>
+
+<p>这种写法适合很干净的密码校验题：</p>
+<ol>
+<li>输入从 stdin 进入</li>
+<li>程序自然执行</li>
+<li>成功和失败分支清晰</li>
+<li>到达成功地址时，路径约束已经足够求出答案</li>
+</ol>
+<p>但是实战题往往没这么顺。程序可能有复杂循环、库函数、文件输入、指针间接访问、哈希、加密、反调试，甚至需要通过溢出控制指针或返回地址。此时如果仍然只想着“让 angr 从头跑到尾”，大概率会遇到路径爆炸、状态无解、跑不动、跑偏等问题。</p>
+<p>所以进阶 angr 的核心不是“更熟练地套模板”，而是三件事：</p>
+<ul>
+<li>找出用户输入能影响哪些状态</li>
+<li>找出真正的成功语义是什么</li>
+<li>在最合适的位置把成功语义写成约束</li>
+</ul>
+<p>也就是说：</p>
+<blockquote>
+<p>angr 的强大之处不在于它能替代逆向分析，而在于它能把逆向分析得到的语义变成可求解的数学约束。</p>
+</blockquote>
+<hr>
+<h2 id="2-路径爆炸：为什么不能什么都交给-angr"><a href="#2-路径爆炸：为什么不能什么都交给-angr" class="headerlink" title="2. 路径爆炸：为什么不能什么都交给 angr"></a>2. 路径爆炸：为什么不能什么都交给 angr</h2><p>符号执行最容易卡住的地方就是路径爆炸。</p>
+<p>比如程序里有这样的逻辑：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (input[<span class="number">0</span>] == <span class="string">&#x27;A&#x27;</span>) ...</span><br><span class="line"><span class="keyword">if</span> (input[<span class="number">1</span>] == <span class="string">&#x27;B&#x27;</span>) ...</span><br><span class="line"><span class="keyword">if</span> (input[<span class="number">2</span>] == <span class="string">&#x27;C&#x27;</span>) ...</span><br></pre></td></tr></table></figure>
+
+<p>每遇到一个和符号变量相关的分支，angr 都可能拆出两条路径：</p>
+<ul>
+<li>条件成立</li>
+<li>条件不成立</li>
+</ul>
+<p>如果分支很多，路径数量会指数级增长。更麻烦的是，很多路径并不重要，只是错误处理、无关循环、库函数内部逻辑。</p>
+<p>所以写 angr 脚本时，经常要主动剪枝：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">simgr.explore(find=is_success, avoid=is_failure)</span><br></pre></td></tr></table></figure>
+
+<p><code>avoid</code> 的意义不只是“失败地址”，它更像是告诉 angr：</p>
+<blockquote>
+<p>这些地方没有分析价值，别把算力浪费在这里。</p>
+</blockquote>
+<p><code>find</code> 和 <code>avoid</code> 都可以写成函数：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">is_success</span>(<span class="params">state</span>):</span><br><span class="line">    out = state.posix.dumps(<span class="number">1</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="string">b&quot;Good Job&quot;</span> <span class="keyword">in</span> out</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">is_failure</span>(<span class="params">state</span>):</span><br><span class="line">    out = state.posix.dumps(<span class="number">1</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="string">b&quot;Try again&quot;</span> <span class="keyword">in</span> out</span><br></pre></td></tr></table></figure>
+
+<p>这比固定地址更灵活。因为有些题里成功地址不好找，但输出很好识别；有些题里失败分支很多，用输出字符串避开会更稳。</p>
+<p>进阶使用 angr 时，要逐渐形成一个习惯：</p>
+<blockquote>
+<p>不要盲目追求完整模拟整个程序，而是尽量缩短 angr 必须探索的路径范围。</p>
+</blockquote>
+<hr>
+<h2 id="3-state-再理解：程序世界的一张快照"><a href="#3-state-再理解：程序世界的一张快照" class="headerlink" title="3. state 再理解：程序世界的一张快照"></a>3. state 再理解：程序世界的一张快照</h2><p>上一篇已经讲过 <code>state</code> 是程序某一刻的完整快照。这里再往深一点看。</p>
+<p>一个 <code>state</code> 至少包含这些东西：</p>
+<ul>
+<li>寄存器：<code>state.regs.eax</code>、<code>state.regs.rdi</code>、<code>state.regs.rsp</code></li>
+<li>内存：<code>state.memory.load()</code>、<code>state.memory.store()</code></li>
+<li>栈：本质上也是内存，但和调用约定关系很密切</li>
+<li>标准输入输出：<code>state.posix.dumps(0/1/2)</code></li>
+<li>文件系统：<code>state.fs.insert()</code></li>
+<li>求解器：<code>state.solver</code></li>
+<li>路径历史：<code>state.history</code></li>
+<li>脚本辅助数据：<code>state.globals</code></li>
+</ul>
+<p>这意味着我们不只是“读取 state”，也可以主动改造 state。</p>
+<h3 id="3-1-把寄存器变成符号"><a href="#3-1-把寄存器变成符号" class="headerlink" title="3.1 把寄存器变成符号"></a>3.1 把寄存器变成符号</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> claripy</span><br><span class="line"></span><br><span class="line">x = claripy.BVS(<span class="string">&quot;x&quot;</span>, <span class="number">32</span>)</span><br><span class="line">state.regs.eax = x</span><br></pre></td></tr></table></figure>
+
+<p>这适合从某个函数中途切入，或者函数参数通过寄存器传递的情况。</p>
+<p>例如 x64 System V 调用约定里，前几个参数通常在：</p>
+<ul>
+<li><code>rdi</code></li>
+<li><code>rsi</code></li>
+<li><code>rdx</code></li>
+<li><code>rcx</code></li>
+<li><code>r8</code></li>
+<li><code>r9</code></li>
+</ul>
+<p>如果我们想分析某个函数，可以直接：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">arg0 = claripy.BVS(<span class="string">&quot;arg0&quot;</span>, <span class="number">64</span>)</span><br><span class="line">state.regs.rdi = arg0</span><br></pre></td></tr></table></figure>
+
+<p>这就等于告诉 angr：这个函数的第一个参数是未知但可控的。</p>
+<h3 id="3-2-把内存变成符号"><a href="#3-2-把内存变成符号" class="headerlink" title="3.2 把内存变成符号"></a>3.2 把内存变成符号</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">buf = claripy.BVS(<span class="string">&quot;buf&quot;</span>, <span class="number">8</span> * <span class="number">32</span>)</span><br><span class="line">state.memory.store(<span class="number">0x404000</span>, buf)</span><br></pre></td></tr></table></figure>
+
+<p>这适合程序后续会从某个固定地址读取数据的情况，比如 <code>.bss</code> 缓冲区、全局变量、手动分配的模拟 buffer。</p>
+<p>如果写入的是整数、地址、指针，一定要注意大小端：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.memory.store(addr, value, endness=p.arch.memory_endness)</span><br></pre></td></tr></table></figure>
+
+<p>不加 <code>endness</code> 时，字节串通常问题不大；但写指针值、整数值时，大小端错了，后续读出来就会完全不对。</p>
+<h3 id="3-3-从内存里读出表达式"><a href="#3-3-从内存里读出表达式" class="headerlink" title="3.3 从内存里读出表达式"></a>3.3 从内存里读出表达式</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">data = state.memory.load(addr, size)</span><br></pre></td></tr></table></figure>
+
+<p><code>data</code> 可能是具体值，也可能是符号表达式。如果 <code>addr</code> 或 <code>size</code> 本身也是符号的，复杂度还会进一步上升。</p>
+<p>实际写脚本时，常见做法是：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">expr = state.memory.load(ptr, <span class="number">8</span>)</span><br><span class="line">state.add_constraints(expr == <span class="string">b&quot;ABCDEFGH&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这就是把“某段内存必须等于目标内容”翻译成约束。</p>
+<hr>
+<h2 id="4-调用约定：为什么经常读-esp-4"><a href="#4-调用约定：为什么经常读-esp-4" class="headerlink" title="4. 调用约定：为什么经常读 esp + 4"></a>4. 调用约定：为什么经常读 <code>esp + 4</code></h2><p>angr 很多进阶题都要在函数调用点读取参数。</p>
+<p>比如执行到 32 位程序的 <code>puts</code> 时，栈大概是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">esp      -&gt; return address</span><br><span class="line">esp + 4  -&gt; puts 的第一个参数</span><br></pre></td></tr></table></figure>
+
+<p>所以脚本里会写：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">arg0 = state.memory.load(</span><br><span class="line">    state.regs.esp + <span class="number">4</span>,</span><br><span class="line">    <span class="number">4</span>,</span><br><span class="line">    endness=p.arch.memory_endness</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>如果是 32 位的 <code>strncpy(dest, src, n)</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">esp + 4   -&gt; dest</span><br><span class="line">esp + 8   -&gt; src</span><br><span class="line">esp + 12  -&gt; n</span><br></pre></td></tr></table></figure>
+
+<p>于是：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">dest = state.memory.load(state.regs.esp + <span class="number">4</span>, <span class="number">4</span>, endness=p.arch.memory_endness)</span><br><span class="line">src  = state.memory.load(state.regs.esp + <span class="number">8</span>, <span class="number">4</span>, endness=p.arch.memory_endness)</span><br><span class="line">n    = state.memory.load(state.regs.esp + <span class="number">12</span>, <span class="number">4</span>, endness=p.arch.memory_endness)</span><br></pre></td></tr></table></figure>
+
+<p>x64 则不一样。比如 System V 下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">arg0 = state.regs.rdi</span><br><span class="line">arg1 = state.regs.rsi</span><br><span class="line">arg2 = state.regs.rdx</span><br></pre></td></tr></table></figure>
+
+<p>所以看 angr 脚本时，不要只背 <code>esp+4</code>。真正要理解的是：</p>
+<blockquote>
+<p>当前架构和调用约定决定了函数参数在哪里。</p>
+</blockquote>
+<p>15、16、17 这三个 lab 都是 32 位题，所以经常从栈上取参数和返回地址。</p>
+<hr>
+<h2 id="5-claripy：约束表达式不是-Python-判断"><a href="#5-claripy：约束表达式不是-Python-判断" class="headerlink" title="5. claripy：约束表达式不是 Python 判断"></a>5. claripy：约束表达式不是 Python 判断</h2><p><code>claripy</code> 是 angr 里负责符号表达式的部分。上一篇讲过 <code>BVS</code> 和 <code>BVV</code>，这里重点强调一个容易混的点：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">x = claripy.BVS(<span class="string">&quot;x&quot;</span>, <span class="number">32</span>)</span><br><span class="line">state.add_constraints(x &gt; <span class="number">10</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这里的 <code>x &gt; 10</code> 不是 Python 当场判断出 True 或 False，而是构造了一个符号约束表达式。</p>
+<p>同理：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cond = input_data == <span class="string">b&quot;ABCDEFGH&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>如果 <code>input_data</code> 是符号表达式，那么 <code>cond</code> 也是符号表达式。</p>
+<h3 id="5-1-claripy-If"><a href="#5-1-claripy-If" class="headerlink" title="5.1 claripy.If"></a>5.1 <code>claripy.If</code></h3><p>有些 hook 或 <code>SimProcedure</code> 需要模拟返回值：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">return</span> claripy.If(</span><br><span class="line">    user_input == desired,</span><br><span class="line">    claripy.BVV(<span class="number">1</span>, <span class="number">32</span>),</span><br><span class="line">    claripy.BVV(<span class="number">0</span>, <span class="number">32</span>)</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>这不是 Python 的 <code>if</code>，而是构造一个“符号条件选择”：</p>
+<ul>
+<li>条件成立时结果是 1</li>
+<li>条件不成立时结果是 0</li>
+</ul>
+<p>如果误写成：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> user_input == desired:</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span></span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span></span><br></pre></td></tr></table></figure>
+
+<p>就会出问题。因为 <code>user_input == desired</code> 不是普通布尔值，而是一个符号约束。</p>
+<h3 id="5-2-eval、eval-upto、cast-to"><a href="#5-2-eval、eval-upto、cast-to" class="headerlink" title="5.2 eval、eval_upto、cast_to"></a>5.2 <code>eval</code>、<code>eval_upto</code>、<code>cast_to</code></h3><p>求解时最常用：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.solver.<span class="built_in">eval</span>(x)</span><br></pre></td></tr></table></figure>
+
+<p>如果想得到字节串：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.solver.<span class="built_in">eval</span>(sym, cast_to=<span class="built_in">bytes</span>)</span><br></pre></td></tr></table></figure>
+
+<p>如果一个变量可能有多个解：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.solver.eval_upto(x, <span class="number">10</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这几个 API 的共同点是：它们都不是“直接读取变量值”，而是在当前路径约束下，找一个或多个满足条件的具体值。</p>
+<hr>
+<h2 id="6-hook-和-SimProcedure：把复杂语义换成简单语义"><a href="#6-hook-和-SimProcedure：把复杂语义换成简单语义" class="headerlink" title="6. hook 和 SimProcedure：把复杂语义换成简单语义"></a>6. hook 和 SimProcedure：把复杂语义换成简单语义</h2><p>很多题跑不动，不是因为主逻辑复杂，而是因为某些函数对符号执行不友好：</p>
+<ul>
+<li><code>scanf</code></li>
+<li><code>strcmp</code></li>
+<li><code>strlen</code></li>
+<li>自定义哈希</li>
+<li>大循环加密</li>
+<li>文件读取函数</li>
+<li>反调试函数</li>
+</ul>
+<p>这时 hook 就很有用。</p>
+<h3 id="6-1-按地址-hook"><a href="#6-1-按地址-hook" class="headerlink" title="6.1 按地址 hook"></a>6.1 按地址 hook</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@p.hook(<span class="params"><span class="number">0x401234</span>, length=<span class="number">5</span></span>)</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">skip_check</span>(<span class="params">state</span>):</span><br><span class="line">    state.regs.eax = <span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<p>意思是执行到 <code>0x401234</code> 时，不再执行原来的机器码，而是执行 Python 逻辑，并跳过 <code>length</code> 字节。</p>
+<p>这种方法适合替换一小段代码。</p>
+<h3 id="6-2-按符号-hook"><a href="#6-2-按符号-hook" class="headerlink" title="6.2 按符号 hook"></a>6.2 按符号 hook</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">p.hook_symbol(<span class="string">&quot;strcmp&quot;</span>, MyStrcmp())</span><br></pre></td></tr></table></figure>
+
+<p>这种方法适合替换库函数。</p>
+<h3 id="6-3-SimProcedure-的参数从哪来"><a href="#6-3-SimProcedure-的参数从哪来" class="headerlink" title="6.3 SimProcedure 的参数从哪来"></a>6.3 SimProcedure 的参数从哪来</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MyScanf</span>(angr.SimProcedure):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">run</span>(<span class="params">self, fmt, arg0, arg1</span>):</span><br><span class="line">        ...</span><br></pre></td></tr></table></figure>
+
+<p><code>fmt</code>、<code>arg0</code>、<code>arg1</code> 不是我们手动传进去的，而是 angr 根据当前架构调用约定，从寄存器或栈上取出来的。</p>
+<p>例如 32 位下 <code>scanf(&quot;%u %s&quot;, &amp;x, buf)</code>：</p>
+<ul>
+<li><code>fmt</code> 是格式字符串地址</li>
+<li><code>arg0</code> 是 <code>&amp;x</code></li>
+<li><code>arg1</code> 是 <code>buf</code></li>
+</ul>
+<p>所以我们可以在 <code>run()</code> 里直接模拟 scanf 的效果：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">num = claripy.BVS(<span class="string">&quot;num&quot;</span>, <span class="number">32</span>)</span><br><span class="line">buf = claripy.BVS(<span class="string">&quot;buf&quot;</span>, <span class="number">8</span> * <span class="number">20</span>)</span><br><span class="line"></span><br><span class="line"><span class="variable language_">self</span>.state.memory.store(arg0, num, endness=<span class="variable language_">self</span>.project.arch.memory_endness)</span><br><span class="line"><span class="variable language_">self</span>.state.memory.store(arg1, buf)</span><br><span class="line"><span class="variable language_">self</span>.state.<span class="built_in">globals</span>[<span class="string">&quot;solution&quot;</span>] = (num, buf)</span><br></pre></td></tr></table></figure>
+
+<p>这段代码不是在“跳过 scanf”，而是在说：</p>
+<blockquote>
+<p>scanf 执行完成后，<code>arg0</code> 指向的位置会被写入一个数字，<code>arg1</code> 指向的位置会被写入一段字符串。</p>
+</blockquote>
+<p>这才是我们真正关心的语义。</p>
+<hr>
+<h2 id="7-输入不只来自-stdin"><a href="#7-输入不只来自-stdin" class="headerlink" title="7. 输入不只来自 stdin"></a>7. 输入不只来自 stdin</h2><p>上一篇已经提到 <code>posix.dumps(0)</code> 可以取 stdin，但 angr 的输入来源不止这一种。</p>
+<h3 id="7-1-argv"><a href="#7-1-argv" class="headerlink" title="7.1 argv"></a>7.1 argv</h3><p>有些程序从命令行参数读输入：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">int</span> argc, <span class="type">char</span> **argv)</span> &#123;</span><br><span class="line">    check(argv[<span class="number">1</span>]);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>可以这样建模：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">arg = claripy.BVS(<span class="string">&quot;arg&quot;</span>, <span class="number">8</span> * <span class="number">16</span>)</span><br><span class="line">state = p.factory.entry_state(args=[<span class="string">&quot;./challenge&quot;</span>, arg])</span><br></pre></td></tr></table></figure>
+
+<h3 id="7-2-文件"><a href="#7-2-文件" class="headerlink" title="7.2 文件"></a>7.2 文件</h3><p>有些程序会打开固定文件名：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fopen(<span class="string">&quot;password.txt&quot;</span>, <span class="string">&quot;rb&quot;</span>);</span><br></pre></td></tr></table></figure>
+
+<p>可以用 <code>SimFile</code>：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">content = claripy.BVS(<span class="string">&quot;file_content&quot;</span>, <span class="number">8</span> * <span class="number">32</span>)</span><br><span class="line">simfile = angr.storage.SimFile(<span class="string">&quot;password.txt&quot;</span>, content=content, size=<span class="number">32</span>)</span><br><span class="line">state.fs.insert(<span class="string">&quot;password.txt&quot;</span>, simfile)</span><br></pre></td></tr></table></figure>
+
+<p>这样程序在 angr 的虚拟文件系统里打开 <code>password.txt</code> 时，读到的就是我们放进去的符号内容。</p>
+<h3 id="7-3-内存、寄存器、栈"><a href="#7-3-内存、寄存器、栈" class="headerlink" title="7.3 内存、寄存器、栈"></a>7.3 内存、寄存器、栈</h3><p>有些题并没有标准输入意义上的 password，而是中途某个地址、寄存器或栈变量变成用户可控。</p>
+<p>这时应该直接建模那个位置，而不是强行从 stdin 出发。</p>
+<hr>
+<h2 id="8-symbolic、satisfiable、extra-constraints"><a href="#8-symbolic、satisfiable、extra-constraints" class="headerlink" title="8. symbolic、satisfiable、extra_constraints"></a>8. <code>symbolic</code>、<code>satisfiable</code>、<code>extra_constraints</code></h2><p>这三个方法在后面的 15、16、17 里会反复出现。</p>
+<h3 id="8-1-state-solver-symbolic-x"><a href="#8-1-state-solver-symbolic-x" class="headerlink" title="8.1 state.solver.symbolic(x)"></a>8.1 <code>state.solver.symbolic(x)</code></h3><p>判断表达式是否符号化：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> state.solver.symbolic(dest):</span><br><span class="line">    ...</span><br></pre></td></tr></table></figure>
+
+<p>如果一个函数参数是符号的，说明它受用户输入影响。对于漏洞题，这就是“可控性”的证据。</p>
+<h3 id="8-2-state-satisfiable-extra-constraints"><a href="#8-2-state-satisfiable-extra-constraints" class="headerlink" title="8.2 state.satisfiable(extra_constraints=...)"></a>8.2 <code>state.satisfiable(extra_constraints=...)</code></h3><p>先问 solver：如果额外加这些条件，当前路径还有没有解？</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.satisfiable(extra_constraints=(dest == target,))</span><br></pre></td></tr></table></figure>
+
+<p>这一步很重要。因为如果直接 <code>add_constraints()</code>，但约束其实无解，就会把当前状态污染掉。</p>
+<h3 id="8-3-state-add-constraints"><a href="#8-3-state-add-constraints" class="headerlink" title="8.3 state.add_constraints(...)"></a>8.3 <code>state.add_constraints(...)</code></h3><p>确认可满足之后，再正式加入约束：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.add_constraints(dest == target)</span><br></pre></td></tr></table></figure>
+
+<p>它的意义是：</p>
+<blockquote>
+<p>从现在开始，最终求出来的输入必须满足这个条件。</p>
+</blockquote>
+<p>这套流程特别适合漏洞利用建模：</p>
+<ol>
+<li>观察某个关键表达式是否受输入控制</li>
+<li>测试它能不能等于目标值</li>
+<li>能的话正式约束它</li>
+<li>让 solver 反推输入</li>
+</ol>
+<hr>
+<h2 id="9-Lab-15：arbitrary-read，任意读"><a href="#9-Lab-15：arbitrary-read，任意读" class="headerlink" title="9. Lab 15：arbitrary read，任意读"></a>9. Lab 15：arbitrary read，任意读</h2><p>Lab 15 的主题是 arbitrary read。它的本质是：用户输入可以覆盖一个指针，程序随后会使用这个指针进行读取。</p>
+<p>可以把程序抽象成这样：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">char</span> *print_me;</span><br><span class="line"><span class="type">char</span> buffer[...];</span><br><span class="line"></span><br><span class="line"><span class="built_in">scanf</span>(<span class="string">&quot;%u %s&quot;</span>, &amp;some_int, buffer);</span><br><span class="line"><span class="built_in">puts</span>(print_me);</span><br></pre></td></tr></table></figure>
+
+<p>真实代码当然不会这么直白，但关键语义差不多：</p>
+<ol>
+<li><code>scanf</code> 把用户输入写入某些位置</li>
+<li>第二段字符串输入太长，可以溢出</li>
+<li>溢出后覆盖了某个即将被 <code>puts</code> 使用的指针</li>
+<li>如果这个指针被覆盖成目标地址，程序就会读出目标字符串</li>
+</ol>
+<p>这题最值得注意的是：我们不需要让 angr 完整理解“溢出”这个词。我们只需要让 angr 自然执行写入，然后在 <code>puts</code> 调用点观察它的参数是否变成符号。</p>
+<h3 id="9-1-hook-scanf"><a href="#9-1-hook-scanf" class="headerlink" title="9.1 hook scanf"></a>9.1 hook scanf</h3><p>通常会先 hook <code>scanf</code>：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">ReplaceScanf</span>(angr.SimProcedure):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">run</span>(<span class="params">self, fmt, int_ptr, str_ptr</span>):</span><br><span class="line">        scanf0 = claripy.BVS(<span class="string">&quot;scanf0&quot;</span>, <span class="number">32</span>)</span><br><span class="line">        scanf1 = claripy.BVS(<span class="string">&quot;scanf1&quot;</span>, <span class="number">20</span> * <span class="number">8</span>)</span><br><span class="line"></span><br><span class="line">        <span class="variable language_">self</span>.state.memory.store(</span><br><span class="line">            int_ptr,</span><br><span class="line">            scanf0,</span><br><span class="line">            endness=<span class="variable language_">self</span>.project.arch.memory_endness</span><br><span class="line">        )</span><br><span class="line">        <span class="variable language_">self</span>.state.memory.store(str_ptr, scanf1)</span><br><span class="line">        <span class="variable language_">self</span>.state.<span class="built_in">globals</span>[<span class="string">&quot;solutions&quot;</span>] = (scanf0, scanf1)</span><br></pre></td></tr></table></figure>
+
+<p>这里 <code>scanf1</code> 故意给得比正常 buffer 大，因为我们希望它有机会覆盖后面的指针。</p>
+<p>如果长度太短，永远覆盖不到目标指针；如果长度太长，可能引入无关复杂度。这个长度一般来自逆向分析：看 buffer 到目标指针之间差多少字节。</p>
+<h3 id="9-2-在-puts-处检查读地址"><a href="#9-2-在-puts-处检查读地址" class="headerlink" title="9.2 在 puts 处检查读地址"></a>9.2 在 puts 处检查读地址</h3><p>32 位下 <code>puts</code> 的第一个参数在 <code>esp + 4</code>：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">check_puts</span>(<span class="params">state</span>):</span><br><span class="line">    puts_arg = state.memory.load(</span><br><span class="line">        state.regs.esp + <span class="number">4</span>,</span><br><span class="line">        <span class="number">4</span>,</span><br><span class="line">        endness=state.project.arch.memory_endness</span><br><span class="line">    )</span><br><span class="line"></span><br><span class="line">    target_addr = <span class="number">0x594E4257</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> state.solver.symbolic(puts_arg):</span><br><span class="line">        <span class="keyword">if</span> state.satisfiable(extra_constraints=(puts_arg == target_addr,)):</span><br><span class="line">            state.add_constraints(puts_arg == target_addr)</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">True</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">False</span></span><br></pre></td></tr></table></figure>
+
+<p>这段代码可以分成四层理解。</p>
+<p>第一层，读取参数：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">puts_arg = memory[esp + <span class="number">4</span>]</span><br></pre></td></tr></table></figure>
+
+<p>也就是 <code>puts(puts_arg)</code> 里的 <code>puts_arg</code>。</p>
+<p>第二层，判断可控性：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.solver.symbolic(puts_arg)</span><br></pre></td></tr></table></figure>
+
+<p>如果它是符号表达式，说明它已经被我们的输入影响。</p>
+<p>第三层，测试目标：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">puts_arg == target_addr</span><br></pre></td></tr></table></figure>
+
+<p>这表示“我希望 puts 读取目标地址”。</p>
+<p>第四层，正式约束：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.add_constraints(puts_arg == target_addr)</span><br></pre></td></tr></table></figure>
+
+<p>一旦这个约束加入，solver 求出的输入就必须让 <code>puts</code> 的参数变成目标地址。</p>
+<h3 id="9-3-这题到底学什么"><a href="#9-3-这题到底学什么" class="headerlink" title="9.3 这题到底学什么"></a>9.3 这题到底学什么</h3><p>Lab 15 的重点不是 <code>puts</code>，而是任意读的建模方式：</p>
+<blockquote>
+<p>当用户输入能控制一个读指针时，在读函数调用点取出指针参数，然后约束它等于目标地址。</p>
+</blockquote>
+<p>类似场景还有：</p>
+<ul>
+<li><code>printf(&quot;%s&quot;, ptr)</code></li>
+<li><code>puts(ptr)</code></li>
+<li><code>write(1, ptr, len)</code></li>
+<li>自定义打印函数</li>
+</ul>
+<p>只要某个函数会从指针读取数据，而这个指针受输入影响，就可以用同样的思路。</p>
+<hr>
+<h2 id="10-Lab-16：arbitrary-write，任意写"><a href="#10-Lab-16：arbitrary-write，任意写" class="headerlink" title="10. Lab 16：arbitrary write，任意写"></a>10. Lab 16：arbitrary write，任意写</h2><p>Lab 16 的主题是 arbitrary write。它比 15 更进一步：15 是控制“读地址”，16 是控制“写地址”。</p>
+<p>可以把程序抽象成这样：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">char</span> *dest;</span><br><span class="line"><span class="type">char</span> src[...];</span><br><span class="line"></span><br><span class="line"><span class="built_in">scanf</span>(<span class="string">&quot;%u %s&quot;</span>, &amp;some_int, src);</span><br><span class="line"><span class="built_in">strncpy</span>(dest, src, len);</span><br></pre></td></tr></table></figure>
+
+<p>如果 <code>src</code> 的输入溢出后覆盖了 <code>dest</code>，那么 <code>strncpy(dest, src, len)</code> 的写入目标就变成用户可控。</p>
+<p>这题的目标通常不是单纯让 <code>dest</code> 等于某个地址，还要让写过去的内容正确。</p>
+<p>所以约束至少有两类：</p>
+<ul>
+<li>写到哪里：<code>dest == target_addr</code></li>
+<li>写什么：<code>memory[src] == target_content</code></li>
+</ul>
+<h3 id="10-1-在-strncpy-调用点观察参数"><a href="#10-1-在-strncpy-调用点观察参数" class="headerlink" title="10.1 在 strncpy 调用点观察参数"></a>10.1 在 strncpy 调用点观察参数</h3><p>32 位下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">esp + 4   -&gt; dest</span><br><span class="line">esp + 8   -&gt; src</span><br><span class="line">esp + 12  -&gt; len</span><br></pre></td></tr></table></figure>
+
+<p>脚本可以写成：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">check_strncpy</span>(<span class="params">state</span>):</span><br><span class="line">    dest = state.memory.load(</span><br><span class="line">        state.regs.esp + <span class="number">4</span>,</span><br><span class="line">        <span class="number">4</span>,</span><br><span class="line">        endness=state.project.arch.memory_endness</span><br><span class="line">    )</span><br><span class="line">    src = state.memory.load(</span><br><span class="line">        state.regs.esp + <span class="number">8</span>,</span><br><span class="line">        <span class="number">4</span>,</span><br><span class="line">        endness=state.project.arch.memory_endness</span><br><span class="line">    )</span><br><span class="line">    length = state.memory.load(</span><br><span class="line">        state.regs.esp + <span class="number">12</span>,</span><br><span class="line">        <span class="number">4</span>,</span><br><span class="line">        endness=state.project.arch.memory_endness</span><br><span class="line">    )</span><br><span class="line"></span><br><span class="line">    target_addr = <span class="number">0x4655544C</span></span><br><span class="line">    target_content = <span class="string">b&quot;DVTBOGZL&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>这里先不急着求解。先把函数调用现场拆开：</p>
+<ul>
+<li><code>dest</code> 是写入地址</li>
+<li><code>src</code> 是源字符串地址</li>
+<li><code>length</code> 是复制长度</li>
+</ul>
+<h3 id="10-2-读取-src-指向的内容"><a href="#10-2-读取-src-指向的内容" class="headerlink" title="10.2 读取 src 指向的内容"></a>10.2 读取 src 指向的内容</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">src_content = state.memory.load(src, <span class="built_in">len</span>(target_content))</span><br></pre></td></tr></table></figure>
+
+<p>如果 <code>src</code> 是符号指针，这里会更复杂；但在这个 lab 里，关键通常是 <code>src</code> 指向的内容受输入影响。</p>
+<p>然后构造两个条件：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">is_dest = dest == target_addr</span><br><span class="line">is_content = src_content == target_content</span><br></pre></td></tr></table></figure>
+
+<p>测试可满足：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> state.satisfiable(extra_constraints=(is_dest, is_content)):</span><br><span class="line">    state.add_constraints(is_dest, is_content)</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">True</span></span><br></pre></td></tr></table></figure>
+
+<p>这就完成了任意写的建模。</p>
+<h3 id="10-3-和-15-的区别"><a href="#10-3-和-15-的区别" class="headerlink" title="10.3 和 15 的区别"></a>10.3 和 15 的区别</h3><p>Lab 15 只要求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">读指针 == 目标地址</span><br></pre></td></tr></table></figure>
+
+<p>Lab 16 要求：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">写指针 == 目标地址</span><br><span class="line">源内容 == 目标内容</span><br></pre></td></tr></table></figure>
+
+<p>它的约束更强，也更接近真实漏洞利用里的 write-what-where：</p>
+<ul>
+<li>where：写到哪里</li>
+<li>what：写什么</li>
+</ul>
+<p>所以 Lab 16 的核心可以总结成：</p>
+<blockquote>
+<p>在写函数调用点，分别约束目标地址和源数据，让 solver 求出能完成这次写入的输入。</p>
+</blockquote>
+<hr>
+<h2 id="11-Lab-17：arbitrary-jump，任意跳转"><a href="#11-Lab-17：arbitrary-jump，任意跳转" class="headerlink" title="11. Lab 17：arbitrary jump，任意跳转"></a>11. Lab 17：arbitrary jump，任意跳转</h2><p>Lab 17 的主题是 arbitrary jump，也就是控制程序执行流。</p>
+<p>前两题控制的是函数参数：</p>
+<ul>
+<li>Lab 15 控制 <code>puts</code> 的参数</li>
+<li>Lab 16 控制 <code>strncpy</code> 的参数</li>
+</ul>
+<p>Lab 17 控制的是 <code>eip</code>。这就更接近栈溢出利用里的 ret2win。</p>
+<p>可以把程序抽象成：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">void</span> <span class="title function_">vuln</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="type">char</span> buf[...];</span><br><span class="line">    <span class="built_in">scanf</span>(<span class="string">&quot;%s&quot;</span>, buf);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>当输入足够长时，<code>buf</code> 会覆盖保存的返回地址。函数返回时：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ret</span><br></pre></td></tr></table></figure>
+
+<p>CPU 会从栈上弹出返回地址放进 <code>eip</code>。如果这部分栈内容来自符号输入，那么 <code>eip</code> 就变成符号的。</p>
+<h3 id="11-1-什么是-unconstrained-state"><a href="#11-1-什么是-unconstrained-state" class="headerlink" title="11.1 什么是 unconstrained state"></a>11.1 什么是 unconstrained state</h3><p>angr 遇到 <code>eip</code> 变成符号时，会出现 <code>unconstrained</code> 状态。</p>
+<p>它的意思是：</p>
+<blockquote>
+<p>当前状态的控制流已经不再被具体地址约束，程序理论上可以跳向很多地方。</p>
+</blockquote>
+<p>在普通程序分析里，这可能是麻烦；但在漏洞利用里，它是信号：</p>
+<blockquote>
+<p>输入已经控制了程序计数器。</p>
+</blockquote>
+<p>默认情况下，angr 可能不会保留这些状态，所以要开启：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">simgr = p.factory.simulation_manager(</span><br><span class="line">    state,</span><br><span class="line">    save_unconstrained=<span class="literal">True</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>这样 unconstrained 状态会进入：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">simgr.unconstrained</span><br></pre></td></tr></table></figure>
+
+<h3 id="11-2-检查能否跳到目标地址"><a href="#11-2-检查能否跳到目标地址" class="headerlink" title="11.2 检查能否跳到目标地址"></a>11.2 检查能否跳到目标地址</h3><p>假设目标地址是：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">target = <span class="number">0x4D4C4749</span></span><br></pre></td></tr></table></figure>
+
+<p>我们要问 solver：</p>
+<blockquote>
+<p>当前这个 unconstrained 状态下，能不能让 <code>eip == target</code>？</p>
+</blockquote>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> u <span class="keyword">in</span> simgr.unconstrained:</span><br><span class="line">    <span class="keyword">if</span> u.satisfiable(extra_constraints=(u.regs.eip == target,)):</span><br><span class="line">        u.add_constraints(u.regs.eip == target)</span><br><span class="line">        simgr.move(<span class="string">&quot;unconstrained&quot;</span>, <span class="string">&quot;found&quot;</span>, filter_func=<span class="keyword">lambda</span> s: s <span class="keyword">is</span> u)</span><br><span class="line">        <span class="keyword">break</span></span><br></pre></td></tr></table></figure>
+
+<p>这一步就是把“控制流劫持到目标地址”变成约束。</p>
+<h3 id="11-3-为什么不用-explore-find-target"><a href="#11-3-为什么不用-explore-find-target" class="headerlink" title="11.3 为什么不用 explore(find=target)"></a>11.3 为什么不用 <code>explore(find=target)</code></h3><p>这是 Lab 17 最容易误解的点。</p>
+<p>普通题里，<code>target</code> 是正常控制流中的一个地址，所以可以：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">simgr.explore(find=target)</span><br></pre></td></tr></table></figure>
+
+<p>但 arbitrary jump 里，目标地址可能根本不在正常路径上。程序只有在返回地址被覆盖后，才会跳过去。</p>
+<p>所以我们不是寻找“自然执行到 target 的路径”，而是寻找：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">哪组输入可以让 eip 被覆盖成 target</span><br></pre></td></tr></table></figure>
+
+<p>这就是为什么要抓 <code>unconstrained</code>。</p>
+<h3 id="11-4-求-payload"><a href="#11-4-求-payload" class="headerlink" title="11.4 求 payload"></a>11.4 求 payload</h3><p>如果前面在 hook scanf 时保存了符号输入：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">self</span>.state.<span class="built_in">globals</span>[<span class="string">&quot;solution&quot;</span>] = buf</span><br></pre></td></tr></table></figure>
+
+<p>最后可以：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">found = simgr.found[<span class="number">0</span>]</span><br><span class="line">buf = found.<span class="built_in">globals</span>[<span class="string">&quot;solution&quot;</span>]</span><br><span class="line">payload = found.solver.<span class="built_in">eval</span>(buf, cast_to=<span class="built_in">bytes</span>)</span><br><span class="line"><span class="built_in">print</span>(payload)</span><br></pre></td></tr></table></figure>
+
+<p>这个 payload 不再是普通 password，而是一段能覆盖返回地址并跳到目标地址的输入。</p>
+<h3 id="11-5-Lab-17-的核心"><a href="#11-5-Lab-17-的核心" class="headerlink" title="11.5 Lab 17 的核心"></a>11.5 Lab 17 的核心</h3><p>Lab 17 学到的是：</p>
+<blockquote>
+<p>当输入能控制指令指针时，不要只盯着成功地址，而要捕获 unconstrained state，再约束 <code>eip</code> 等于目标地址。</p>
+</blockquote>
+<p>同类思路也可以用在：</p>
+<ul>
+<li>覆盖函数指针</li>
+<li>覆盖虚表指针</li>
+<li>覆盖返回地址</li>
+<li>间接跳转目标可控</li>
+<li><code>call eax</code>、<code>jmp eax</code> 这类控制流可控场景</li>
+</ul>
+<hr>
+<h2 id="12-三个-lab-放在一起看"><a href="#12-三个-lab-放在一起看" class="headerlink" title="12. 三个 lab 放在一起看"></a>12. 三个 lab 放在一起看</h2><p>15、16、17 其实是一个递进关系。</p>
+<table>
+<thead>
+<tr>
+<th>lab</th>
+<th>控制对象</th>
+<th>观察位置</th>
+<th>关键约束</th>
+<th>漏洞能力</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>15</td>
+<td>读指针</td>
+<td><code>puts</code> 等读函数调用点</td>
+<td><code>arg == target_addr</code></td>
+<td>任意读</td>
+</tr>
+<tr>
+<td>16</td>
+<td>写指针和源内容</td>
+<td><code>strncpy</code> 等写函数调用点</td>
+<td><code>dest == target_addr</code>，<code>src_content == target_content</code></td>
+<td>任意写</td>
+</tr>
+<tr>
+<td>17</td>
+<td>指令指针</td>
+<td><code>unconstrained</code> 状态</td>
+<td><code>eip == target</code></td>
+<td>任意跳转</td>
+</tr>
+</tbody></table>
+<p>这三个题最重要的共同点是：</p>
+<blockquote>
+<p>先确认输入已经影响了关键状态，再把目标利用效果写成约束。</p>
+</blockquote>
+<p>这和普通密码题不一样。普通密码题约束的是“输入经过算法后等于目标值”；这三个题约束的是“输入造成的程序状态变化等于目标效果”。</p>
+<p>换句话说，angr 不只是在求密码，也可以在求 payload。</p>
+<hr>
+<h2 id="13-实战写-angr-脚本的流程"><a href="#13-实战写-angr-脚本的流程" class="headerlink" title="13. 实战写 angr 脚本的流程"></a>13. 实战写 angr 脚本的流程</h2><p>做一题时，我现在更倾向于按这个顺序来：</p>
+<h3 id="13-1-静态分析先行"><a href="#13-1-静态分析先行" class="headerlink" title="13.1 静态分析先行"></a>13.1 静态分析先行</h3><p>先用 IDA&#x2F;Ghidra 看清：</p>
+<ul>
+<li>输入从哪里来</li>
+<li>输入长度是多少</li>
+<li>输入写到哪里</li>
+<li>有没有溢出</li>
+<li>关键函数在哪里</li>
+<li>成功条件是什么</li>
+<li>失败分支在哪里</li>
+</ul>
+<p>不要一上来就写 angr。angr 最怕目标不清楚。</p>
+<h3 id="13-2-选切入点"><a href="#13-2-选切入点" class="headerlink" title="13.2 选切入点"></a>13.2 选切入点</h3><p>如果从入口跑很简单，就用：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state = p.factory.entry_state()</span><br></pre></td></tr></table></figure>
+
+<p>如果只想分析某个函数：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state = p.factory.call_state(func_addr, arg0, arg1)</span><br></pre></td></tr></table></figure>
+
+<p>如果要从函数中间开始：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state = p.factory.blank_state(addr=addr)</span><br></pre></td></tr></table></figure>
+
+<p>切入点选得好，路径数量会少很多。</p>
+<h3 id="13-3-符号化真正可控的数据"><a href="#13-3-符号化真正可控的数据" class="headerlink" title="13.3 符号化真正可控的数据"></a>13.3 符号化真正可控的数据</h3><p>不要什么都符号化。</p>
+<p>应该只符号化真正会影响目标条件的部分：</p>
+<ul>
+<li>stdin 中的密码</li>
+<li>argv 中的参数</li>
+<li>文件内容</li>
+<li>某个 buffer</li>
+<li>某个寄存器</li>
+<li>某段可溢出的输入</li>
+</ul>
+<p>符号变量越多，solver 压力越大。</p>
+<h3 id="13-4-在关键点加约束"><a href="#13-4-在关键点加约束" class="headerlink" title="13.4 在关键点加约束"></a>13.4 在关键点加约束</h3><p>与其让 angr 硬跑到最后，不如在关键函数调用点停下：</p>
+<ul>
+<li><code>puts</code></li>
+<li><code>printf</code></li>
+<li><code>strcmp</code></li>
+<li><code>strncpy</code></li>
+<li><code>memcpy</code></li>
+<li><code>memcmp</code></li>
+<li><code>ret</code></li>
+<li>间接跳转</li>
+</ul>
+<p>读取参数，判断是否符号化，再加目标约束。</p>
+<h3 id="13-5-求解并验证"><a href="#13-5-求解并验证" class="headerlink" title="13.5 求解并验证"></a>13.5 求解并验证</h3><p>求出结果后，最好再用真实程序跑一遍验证。angr 的模型可能和真实环境有差异，尤其是：</p>
+<ul>
+<li>libc 行为</li>
+<li>未初始化内存</li>
+<li>文件路径</li>
+<li>输入换行</li>
+<li>字符串截断</li>
+<li>地址随机化</li>
+</ul>
+<hr>
+<h2 id="14-常见坑"><a href="#14-常见坑" class="headerlink" title="14. 常见坑"></a>14. 常见坑</h2><h3 id="14-1-约束无解"><a href="#14-1-约束无解" class="headerlink" title="14.1 约束无解"></a>14.1 约束无解</h3><p>如果 <code>simgr.found</code> 为空，不一定是 angr 不行，可能是：</p>
+<ul>
+<li><code>find</code> 地址错了</li>
+<li><code>avoid</code> 太激进</li>
+<li>输入长度不够</li>
+<li>大小端写错</li>
+<li>hook 语义写错</li>
+<li>目标地址写错</li>
+</ul>
+<p>可以先减少约束，检查某个变量是否符号化，再逐步加目标条件。</p>
+<h3 id="14-2-字节序错误"><a href="#14-2-字节序错误" class="headerlink" title="14.2 字节序错误"></a>14.2 字节序错误</h3><p>写指针时要用：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">endness=p.arch.memory_endness</span><br></pre></td></tr></table></figure>
+
+<p>否则 <code>0x41424344</code> 可能按错误顺序写进内存。</p>
+<h3 id="14-3-字符串长度错误"><a href="#14-3-字符串长度错误" class="headerlink" title="14.3 字符串长度错误"></a>14.3 字符串长度错误</h3><p><code>BVS(&quot;buf&quot;, 8 * n)</code> 里的单位是 bit，不是 byte。</p>
+<p>如果要 20 字节：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">claripy.BVS(<span class="string">&quot;buf&quot;</span>, <span class="number">20</span> * <span class="number">8</span>)</span><br></pre></td></tr></table></figure>
+
+<h3 id="14-4-Python-if-和符号-If-混淆"><a href="#14-4-Python-if-和符号-If-混淆" class="headerlink" title="14.4 Python if 和符号 If 混淆"></a>14.4 Python if 和符号 If 混淆</h3><p>符号表达式不能直接拿来做 Python 分支判断。需要用：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">claripy.If(cond, true_expr, false_expr)</span><br></pre></td></tr></table></figure>
+
+<p>或者用：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">state.satisfiable(extra_constraints=(cond,))</span><br></pre></td></tr></table></figure>
+
+
+
+<hr>
+<h2 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h2><ul>
+<li><a target="_blank" rel="noopener" href="https://www.kn0sky.com/?p=0e2f9462-df20-4705-83c2-4ff36b5b0c40">Angr 初学笔记 - 我可是会飞的啊</a></li>
+<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/A951860555/article/details/119102789">CTF 逆向工具 angr 的学习笔记 - CSDN</a></li>
+<li><a target="_blank" rel="noopener" href="https://docs.angr.io/en/v9.2.119/extending-angr/simprocedures.html">angr 官方文档：Hooks and SimProcedures</a></li>
+<li><a target="_blank" rel="noopener" href="https://api.angr.io/en/latest/api.html">angr API 文档</a></li>
+<li><a target="_blank" rel="noopener" href="https://api.angr.io/claripy.html">claripy API 文档</a></li>
+</ul>
+<hr>
+<p><strong>作者：Ro0t</strong><br><strong>方向：Binary &#x2F; Reverse</strong></p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="http://example.com">Ro0t</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="http://example.com/2026/04/26/%E5%86%8D%E6%8E%A2angr/">http://example.com/2026/04/26/%E5%86%8D%E6%8E%A2angr/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="http://example.com" target="_blank">Ro0t's Blog</a>！</span></div></div><div class="tag_share"><div class="post-share"><div class="social-share" data-image="/img/re.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/04/25/%E5%88%9D%E6%8E%A2SEH%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E6%9C%BA%E5%88%B6%EF%BC%8CTEB%EF%BC%8CPEB%EF%BC%8CTLS(1)/" title="初探SEH异常处理机制,TLS,PEB,TEB原理"><img class="cover" src="/img/re.jpg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">初探SEH异常处理机制,TLS,PEB,TEB原理</div></div><div class="info-2"><div class="info-item-1">初探可能不是很详细，只是为了了解 SEH定义:	SEH是微软自己的异常处理机制，是C&#x2F;C++的Microsoft扩展，用于处理访问冲突，除0等异常情况，在C++里推荐ISO C++ exception了解异常处理机制：	异常处理大致我们需要了解三层：	1.硬件&#x2F;OS异常：访问冲突，非法指令，除零，这些异常先有CPU&#x2F;OS产生	2.SEH:Windows提供的统一用户态异常分发框架，用来把这些异常一路送...</div></div></div></a></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Ro0t</div><div class="author-info-description">专注二进制安全、逆向分析与漏洞利用</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">8</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">3</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/Ro0t" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">This is my Blog</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-angr-%E8%BF%9B%E9%98%B6%E7%9A%84%E6%A0%B8%E5%BF%83%EF%BC%9A%E4%B8%8D%E6%98%AF%E8%87%AA%E5%8A%A8%E8%B7%91%EF%BC%8C%E8%80%8C%E6%98%AF%E5%BB%BA%E6%A8%A1"><span class="toc-number">1.</span> <span class="toc-text">1. angr 进阶的核心：不是自动跑，而是建模</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-%E8%B7%AF%E5%BE%84%E7%88%86%E7%82%B8%EF%BC%9A%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E4%BB%80%E4%B9%88%E9%83%BD%E4%BA%A4%E7%BB%99-angr"><span class="toc-number">2.</span> <span class="toc-text">2. 路径爆炸：为什么不能什么都交给 angr</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-state-%E5%86%8D%E7%90%86%E8%A7%A3%EF%BC%9A%E7%A8%8B%E5%BA%8F%E4%B8%96%E7%95%8C%E7%9A%84%E4%B8%80%E5%BC%A0%E5%BF%AB%E7%85%A7"><span class="toc-number">3.</span> <span class="toc-text">3. state 再理解：程序世界的一张快照</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1-%E6%8A%8A%E5%AF%84%E5%AD%98%E5%99%A8%E5%8F%98%E6%88%90%E7%AC%A6%E5%8F%B7"><span class="toc-number">3.1.</span> <span class="toc-text">3.1 把寄存器变成符号</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-2-%E6%8A%8A%E5%86%85%E5%AD%98%E5%8F%98%E6%88%90%E7%AC%A6%E5%8F%B7"><span class="toc-number">3.2.</span> <span class="toc-text">3.2 把内存变成符号</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-3-%E4%BB%8E%E5%86%85%E5%AD%98%E9%87%8C%E8%AF%BB%E5%87%BA%E8%A1%A8%E8%BE%BE%E5%BC%8F"><span class="toc-number">3.3.</span> <span class="toc-text">3.3 从内存里读出表达式</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-%E8%B0%83%E7%94%A8%E7%BA%A6%E5%AE%9A%EF%BC%9A%E4%B8%BA%E4%BB%80%E4%B9%88%E7%BB%8F%E5%B8%B8%E8%AF%BB-esp-4"><span class="toc-number">4.</span> <span class="toc-text">4. 调用约定：为什么经常读 esp + 4</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-claripy%EF%BC%9A%E7%BA%A6%E6%9D%9F%E8%A1%A8%E8%BE%BE%E5%BC%8F%E4%B8%8D%E6%98%AF-Python-%E5%88%A4%E6%96%AD"><span class="toc-number">5.</span> <span class="toc-text">5. claripy：约束表达式不是 Python 判断</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#5-1-claripy-If"><span class="toc-number">5.1.</span> <span class="toc-text">5.1 claripy.If</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#5-2-eval%E3%80%81eval-upto%E3%80%81cast-to"><span class="toc-number">5.2.</span> <span class="toc-text">5.2 eval、eval_upto、cast_to</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-hook-%E5%92%8C-SimProcedure%EF%BC%9A%E6%8A%8A%E5%A4%8D%E6%9D%82%E8%AF%AD%E4%B9%89%E6%8D%A2%E6%88%90%E7%AE%80%E5%8D%95%E8%AF%AD%E4%B9%89"><span class="toc-number">6.</span> <span class="toc-text">6. hook 和 SimProcedure：把复杂语义换成简单语义</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#6-1-%E6%8C%89%E5%9C%B0%E5%9D%80-hook"><span class="toc-number">6.1.</span> <span class="toc-text">6.1 按地址 hook</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#6-2-%E6%8C%89%E7%AC%A6%E5%8F%B7-hook"><span class="toc-number">6.2.</span> <span class="toc-text">6.2 按符号 hook</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#6-3-SimProcedure-%E7%9A%84%E5%8F%82%E6%95%B0%E4%BB%8E%E5%93%AA%E6%9D%A5"><span class="toc-number">6.3.</span> <span class="toc-text">6.3 SimProcedure 的参数从哪来</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#7-%E8%BE%93%E5%85%A5%E4%B8%8D%E5%8F%AA%E6%9D%A5%E8%87%AA-stdin"><span class="toc-number">7.</span> <span class="toc-text">7. 输入不只来自 stdin</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#7-1-argv"><span class="toc-number">7.1.</span> <span class="toc-text">7.1 argv</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#7-2-%E6%96%87%E4%BB%B6"><span class="toc-number">7.2.</span> <span class="toc-text">7.2 文件</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#7-3-%E5%86%85%E5%AD%98%E3%80%81%E5%AF%84%E5%AD%98%E5%99%A8%E3%80%81%E6%A0%88"><span class="toc-number">7.3.</span> <span class="toc-text">7.3 内存、寄存器、栈</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#8-symbolic%E3%80%81satisfiable%E3%80%81extra-constraints"><span class="toc-number">8.</span> <span class="toc-text">8. symbolic、satisfiable、extra_constraints</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#8-1-state-solver-symbolic-x"><span class="toc-number">8.1.</span> <span class="toc-text">8.1 state.solver.symbolic(x)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#8-2-state-satisfiable-extra-constraints"><span class="toc-number">8.2.</span> <span class="toc-text">8.2 state.satisfiable(extra_constraints&#x3D;...)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#8-3-state-add-constraints"><span class="toc-number">8.3.</span> <span class="toc-text">8.3 state.add_constraints(...)</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#9-Lab-15%EF%BC%9Aarbitrary-read%EF%BC%8C%E4%BB%BB%E6%84%8F%E8%AF%BB"><span class="toc-number">9.</span> <span class="toc-text">9. Lab 15：arbitrary read，任意读</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#9-1-hook-scanf"><span class="toc-number">9.1.</span> <span class="toc-text">9.1 hook scanf</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#9-2-%E5%9C%A8-puts-%E5%A4%84%E6%A3%80%E6%9F%A5%E8%AF%BB%E5%9C%B0%E5%9D%80"><span class="toc-number">9.2.</span> <span class="toc-text">9.2 在 puts 处检查读地址</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#9-3-%E8%BF%99%E9%A2%98%E5%88%B0%E5%BA%95%E5%AD%A6%E4%BB%80%E4%B9%88"><span class="toc-number">9.3.</span> <span class="toc-text">9.3 这题到底学什么</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#10-Lab-16%EF%BC%9Aarbitrary-write%EF%BC%8C%E4%BB%BB%E6%84%8F%E5%86%99"><span class="toc-number">10.</span> <span class="toc-text">10. Lab 16：arbitrary write，任意写</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#10-1-%E5%9C%A8-strncpy-%E8%B0%83%E7%94%A8%E7%82%B9%E8%A7%82%E5%AF%9F%E5%8F%82%E6%95%B0"><span class="toc-number">10.1.</span> <span class="toc-text">10.1 在 strncpy 调用点观察参数</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#10-2-%E8%AF%BB%E5%8F%96-src-%E6%8C%87%E5%90%91%E7%9A%84%E5%86%85%E5%AE%B9"><span class="toc-number">10.2.</span> <span class="toc-text">10.2 读取 src 指向的内容</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#10-3-%E5%92%8C-15-%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="toc-number">10.3.</span> <span class="toc-text">10.3 和 15 的区别</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#11-Lab-17%EF%BC%9Aarbitrary-jump%EF%BC%8C%E4%BB%BB%E6%84%8F%E8%B7%B3%E8%BD%AC"><span class="toc-number">11.</span> <span class="toc-text">11. Lab 17：arbitrary jump，任意跳转</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#11-1-%E4%BB%80%E4%B9%88%E6%98%AF-unconstrained-state"><span class="toc-number">11.1.</span> <span class="toc-text">11.1 什么是 unconstrained state</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#11-2-%E6%A3%80%E6%9F%A5%E8%83%BD%E5%90%A6%E8%B7%B3%E5%88%B0%E7%9B%AE%E6%A0%87%E5%9C%B0%E5%9D%80"><span class="toc-number">11.2.</span> <span class="toc-text">11.2 检查能否跳到目标地址</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#11-3-%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E7%94%A8-explore-find-target"><span class="toc-number">11.3.</span> <span class="toc-text">11.3 为什么不用 explore(find&#x3D;target)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#11-4-%E6%B1%82-payload"><span class="toc-number">11.4.</span> <span class="toc-text">11.4 求 payload</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#11-5-Lab-17-%E7%9A%84%E6%A0%B8%E5%BF%83"><span class="toc-number">11.5.</span> <span class="toc-text">11.5 Lab 17 的核心</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#12-%E4%B8%89%E4%B8%AA-lab-%E6%94%BE%E5%9C%A8%E4%B8%80%E8%B5%B7%E7%9C%8B"><span class="toc-number">12.</span> <span class="toc-text">12. 三个 lab 放在一起看</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#13-%E5%AE%9E%E6%88%98%E5%86%99-angr-%E8%84%9A%E6%9C%AC%E7%9A%84%E6%B5%81%E7%A8%8B"><span class="toc-number">13.</span> <span class="toc-text">13. 实战写 angr 脚本的流程</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#13-1-%E9%9D%99%E6%80%81%E5%88%86%E6%9E%90%E5%85%88%E8%A1%8C"><span class="toc-number">13.1.</span> <span class="toc-text">13.1 静态分析先行</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#13-2-%E9%80%89%E5%88%87%E5%85%A5%E7%82%B9"><span class="toc-number">13.2.</span> <span class="toc-text">13.2 选切入点</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#13-3-%E7%AC%A6%E5%8F%B7%E5%8C%96%E7%9C%9F%E6%AD%A3%E5%8F%AF%E6%8E%A7%E7%9A%84%E6%95%B0%E6%8D%AE"><span class="toc-number">13.3.</span> <span class="toc-text">13.3 符号化真正可控的数据</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#13-4-%E5%9C%A8%E5%85%B3%E9%94%AE%E7%82%B9%E5%8A%A0%E7%BA%A6%E6%9D%9F"><span class="toc-number">13.4.</span> <span class="toc-text">13.4 在关键点加约束</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#13-5-%E6%B1%82%E8%A7%A3%E5%B9%B6%E9%AA%8C%E8%AF%81"><span class="toc-number">13.5.</span> <span class="toc-text">13.5 求解并验证</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#14-%E5%B8%B8%E8%A7%81%E5%9D%91"><span class="toc-number">14.</span> <span class="toc-text">14. 常见坑</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#14-1-%E7%BA%A6%E6%9D%9F%E6%97%A0%E8%A7%A3"><span class="toc-number">14.1.</span> <span class="toc-text">14.1 约束无解</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#14-2-%E5%AD%97%E8%8A%82%E5%BA%8F%E9%94%99%E8%AF%AF"><span class="toc-number">14.2.</span> <span class="toc-text">14.2 字节序错误</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#14-3-%E5%AD%97%E7%AC%A6%E4%B8%B2%E9%95%BF%E5%BA%A6%E9%94%99%E8%AF%AF"><span class="toc-number">14.3.</span> <span class="toc-text">14.3 字符串长度错误</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#14-4-Python-if-%E5%92%8C%E7%AC%A6%E5%8F%B7-If-%E6%B7%B7%E6%B7%86"><span class="toc-number">14.4.</span> <span class="toc-text">14.4 Python if 和符号 If 混淆</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8F%82%E8%80%83"><span class="toc-number">15.</span> <span class="toc-text">参考</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="再探Angr"/></a><div class="content"><a class="title" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr">再探Angr</a><time datetime="2026-04-26T13:15:58.515Z" title="发表于 2026-04-26 21:15:58">2026-04-26</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/25/%E5%88%9D%E6%8E%A2SEH%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E6%9C%BA%E5%88%B6%EF%BC%8CTEB%EF%BC%8CPEB%EF%BC%8CTLS(1)/" title="初探SEH异常处理机制,TLS,PEB,TEB原理"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初探SEH异常处理机制,TLS,PEB,TEB原理"/></a><div class="content"><a class="title" href="/2026/04/25/%E5%88%9D%E6%8E%A2SEH%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E6%9C%BA%E5%88%B6%EF%BC%8CTEB%EF%BC%8CPEB%EF%BC%8CTLS(1)/" title="初探SEH异常处理机制,TLS,PEB,TEB原理">初探SEH异常处理机制,TLS,PEB,TEB原理</a><time datetime="2026-04-25T09:43:17.072Z" title="发表于 2026-04-25 17:43:17">2026-04-25</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/25/%E5%88%9D%E6%8E%A2%E5%AE%89%E5%8D%93%E5%87%BA%E9%A2%98%E5%AD%A6%E4%B9%A0/" title="初探安卓出题学习"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初探安卓出题学习"/></a><div class="content"><a class="title" href="/2026/04/25/%E5%88%9D%E6%8E%A2%E5%AE%89%E5%8D%93%E5%87%BA%E9%A2%98%E5%AD%A6%E4%B9%A0/" title="初探安卓出题学习">初探安卓出题学习</a><time datetime="2026-04-25T09:29:19.552Z" title="发表于 2026-04-25 17:29:19">2026-04-25</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/25/%E5%88%9D%E6%8E%A2Kotlin/" title="初探 Kotlin：0 基础入门笔记"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初探 Kotlin：0 基础入门笔记"/></a><div class="content"><a class="title" href="/2026/04/25/%E5%88%9D%E6%8E%A2Kotlin/" title="初探 Kotlin：0 基础入门笔记">初探 Kotlin：0 基础入门笔记</a><time datetime="2026-04-24T16:00:00.000Z" title="发表于 2026-04-25 00:00:00">2026-04-25</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/24/xmctf%20re%20easyre/" title="xmctf re easyre"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="xmctf re easyre"/></a><div class="content"><a class="title" href="/2026/04/24/xmctf%20re%20easyre/" title="xmctf re easyre">xmctf re easyre</a><time datetime="2026-04-24T13:17:03.533Z" title="发表于 2026-04-24 21:17:03">2026-04-24</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Ro0t</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div><div class="footer_custom_text">Ro0t · Binary Security Blog</div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div></div></body></html>
