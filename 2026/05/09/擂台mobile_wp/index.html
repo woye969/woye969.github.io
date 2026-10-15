@@ -1,0 +1,365 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>Ro0t's Blog | Ro0t's Blog</title><meta name="author" content="Ro0t"><meta name="copyright" content="Ro0t"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="Android Reverse WP题目文件：C:&#x2F;Users&#x2F;jianr&#x2F;Downloads&#x2F;app-release-01.apk 最终 flag： 1ISCC&#123;n2R#7_pQ!9vL*5mWnp&#125;  相关脚本：  solve_flag.py  1. 题目初探这是一个典型的 Android APK 逆向题，表面上是输入 flag 后点击按钮进行校验，但实际做了两层迷惑：">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Ro0t&#39;s Blog">
+<meta property="og:url" content="http://example.com/2026/05/09/%E6%93%82%E5%8F%B0mobile_wp/index.html">
+<meta property="og:site_name" content="Ro0t&#39;s Blog">
+<meta property="og:description" content="Android Reverse WP题目文件：C:&#x2F;Users&#x2F;jianr&#x2F;Downloads&#x2F;app-release-01.apk 最终 flag： 1ISCC&#123;n2R#7_pQ!9vL*5mWnp&#125;  相关脚本：  solve_flag.py  1. 题目初探这是一个典型的 Android APK 逆向题，表面上是输入 flag 后点击按钮进行校验，但实际做了两层迷惑：">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://example.com/img/re.jpg">
+<meta property="article:published_time" content="2026-05-09T01:26:36.535Z">
+<meta property="article:modified_time" content="2026-05-09T13:28:34.991Z">
+<meta property="article:author" content="Ro0t">
+<meta property="article:tag" content="CTF, Reverse, Pwn, Binary, Exploit">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/img/re.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "",
+  "url": "http://example.com/2026/05/09/%E6%93%82%E5%8F%B0mobile_wp/",
+  "image": "http://example.com/img/re.jpg",
+  "datePublished": "2026-05-09T01:26:36.535Z",
+  "dateModified": "2026-05-09T13:28:34.991Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ro0t",
+      "url": "http://example.com"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="http://example.com/2026/05/09/%E6%93%82%E5%8F%B0mobile_wp/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          const mediaQueryDark = window.matchMedia('(prefers-color-scheme: dark)')
+          const mediaQueryLight = window.matchMedia('(prefers-color-scheme: light)')
+
+          if (theme === undefined) {
+            if (mediaQueryLight.matches) activateLightMode()
+            else if (mediaQueryDark.matches) activateDarkMode()
+            else {
+              const hour = new Date().getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            mediaQueryDark.addEventListener('change', () => {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else {
+            theme === 'light' ? activateLightMode() : activateDarkMode()
+          }
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'Ro0t\'s Blog',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 8.1.1"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">12</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">5</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/re.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Ro0t's Blog</span></a><a class="nav-page-title" href="/"><span class="site-name">Ro0t's Blog</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">无标题</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-05-09T01:26:36.535Z" title="发表于 2026-05-09 09:26:36">2026-05-09</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-05-09T13:28:34.991Z" title="更新于 2026-05-09 21:28:34">2026-05-09</time></span></div><div class="meta-secondline"></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h1 id="Android-Reverse-WP"><a href="#Android-Reverse-WP" class="headerlink" title="Android Reverse WP"></a>Android Reverse WP</h1><p>题目文件：<code>C:/Users/jianr/Downloads/app-release-01.apk</code></p>
+<p>最终 flag：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ISCC&#123;n2R#7_pQ!9vL*5mWnp&#125;</span><br></pre></td></tr></table></figure>
+
+<p>相关脚本：</p>
+<ul>
+<li><a href="C:\Users\jianr\Documents\Codex\2026-05-09\files-mentioned-by-the-user-app\solve_flag.py">solve_flag.py</a></li>
+</ul>
+<h2 id="1-题目初探"><a href="#1-题目初探" class="headerlink" title="1. 题目初探"></a>1. 题目初探</h2><p>这是一个典型的 Android APK 逆向题，表面上是输入 flag 后点击按钮进行校验，但实际做了两层迷惑：</p>
+<ol>
+<li>普通点击不会进入真正的 flag 校验逻辑。</li>
+<li>真正的校验在 JNI 层完成，Java 里只能看到前置处理。</li>
+</ol>
+<p>先看 APK 结构，可以发现：</p>
+<ul>
+<li>包名：<code>com.example.mobile02</code></li>
+<li>入口 Activity：<code>com.example.mobile02.MainActivity</code></li>
+<li>含有 native 库：<code>libsecure_verify.so</code></li>
+<li>存在 <code>classes.dex</code> 和 <code>classes2.dex</code></li>
+</ul>
+<p>看到 native 库后，基本可以判断这题大概率是：</p>
+<ul>
+<li>Java 层做格式校验和预处理</li>
+<li>JNI 层做最终比对</li>
+</ul>
+<h2 id="2-Java-层分析"><a href="#2-Java-层分析" class="headerlink" title="2. Java 层分析"></a>2. Java 层分析</h2><h3 id="2-1-MainActivity-的关键点"><a href="#2-1-MainActivity-的关键点" class="headerlink" title="2.1 MainActivity 的关键点"></a>2.1 MainActivity 的关键点</h3><p><code>MainActivity</code> 在静态初始化中会加载 native 库：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">System.loadLibrary(<span class="string">&quot;secure_verify&quot;</span>);</span><br></pre></td></tr></table></figure>
+
+<p>并声明了 native 方法：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">native</span> <span class="type">boolean</span> <span class="title function_">nativeVerify</span><span class="params">(<span class="type">byte</span>[] data)</span>;</span><br></pre></td></tr></table></figure>
+
+<p>这说明 Java 层最终会把某段字节数组丢给 native 去判断真假。</p>
+<h3 id="2-2-表面按钮逻辑其实是烟雾弹"><a href="#2-2-表面按钮逻辑其实是烟雾弹" class="headerlink" title="2.2 表面按钮逻辑其实是烟雾弹"></a>2.2 表面按钮逻辑其实是烟雾弹</h3><p><code>onCreate()</code> 里给按钮绑定了点击事件。普通点击后会做这些事：</p>
+<ol>
+<li>调用 <code>SystemEnvironmentManager.updateState()</code></li>
+<li>调用 <code>SystemEnvironmentManager.prepareContext(...)</code></li>
+<li>弹出 <code>&quot;Initializing Secure Handshake...&quot;</code> 提示</li>
+<li>延迟执行 <code>lambda$onCreate$0</code></li>
+</ol>
+<p>继续往下看，<code>lambda$onCreate$0</code> 做的是：</p>
+<ol>
+<li>读取输入框内容</li>
+<li>调用 <code>SecurityProvider.computeSecureHash(input)</code></li>
+<li>弹出一个类似 <code>&quot;Signature Error: [xxxxxxxx] Mismatch&quot;</code> 的提示</li>
+</ol>
+<p>这个逻辑看起来像校验，但实际上只是个干扰项，因为：</p>
+<ul>
+<li>它不会决定 flag 正误</li>
+<li>只是算了一个 MD5 相关的假结果并展示出来</li>
+</ul>
+<p>所以如果只盯着按钮点击逻辑，会很容易被带偏。</p>
+<h3 id="2-3-真正入口是“长按”"><a href="#2-3-真正入口是“长按”" class="headerlink" title="2.3 真正入口是“长按”"></a>2.3 真正入口是“长按”</h3><p><code>SystemEnvironmentManager</code> 里维护了一个 <code>CLICK_TRIGGER</code> 计数器。</p>
+<p>逻辑大致是：</p>
+<ul>
+<li>每点击一次按钮，计数加一</li>
+<li>当点击次数达到一定值后，才会给按钮挂上真正的长按监听</li>
+<li>还额外判断了是否处于调试环境</li>
+</ul>
+<p>也就是说，真实交互是：</p>
+<ol>
+<li>先点按钮至少 3 次</li>
+<li>再长按按钮</li>
+<li>才会进入真正的 flag 校验</li>
+</ol>
+<p>这个设计就是题目的一个坑点。</p>
+<h3 id="2-4-真正校验逻辑"><a href="#2-4-真正校验逻辑" class="headerlink" title="2.4 真正校验逻辑"></a>2.4 真正校验逻辑</h3><p>长按事件最终会进入 <code>SecurityCoreProcessor.onLongClick(View)</code>。</p>
+<p>这里的流程非常清晰：</p>
+<ol>
+<li>从输入框读取字符串</li>
+<li>调用 <code>FlagValidator.isFormatValid(input)</code> 判断格式</li>
+<li>如果格式合法，再调用 <code>FlagValidator.doFinalCheck(...)</code></li>
+<li>根据返回值弹 success 或 fail toast</li>
+</ol>
+<p>格式校验函数 <code>isFormatValid</code> 很简单：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">return</span> input.startsWith(<span class="string">&quot;ISCC&#123;&quot;</span>) &amp;&amp; input.endsWith(<span class="string">&quot;&#125;&quot;</span>);</span><br></pre></td></tr></table></figure>
+
+<p>因此 flag 外层格式已经确定是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ISCC&#123;...&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="3-Java-预处理算法"><a href="#3-Java-预处理算法" class="headerlink" title="3. Java 预处理算法"></a>3. Java 预处理算法</h2><h3 id="3-1-doFinalCheck-的逻辑"><a href="#3-1-doFinalCheck-的逻辑" class="headerlink" title="3.1 doFinalCheck 的逻辑"></a>3.1 doFinalCheck 的逻辑</h3><p><code>FlagValidator.doFinalCheck()</code> 的核心流程是：</p>
+<ol>
+<li>取出花括号内部内容</li>
+<li>调用 <code>CryptoEngine.performTransformation(inner)</code></li>
+<li>将结果作为 <code>byte[]</code> 传给 <code>nativeVerify</code></li>
+</ol>
+<p>伪代码如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">String</span> <span class="variable">inner</span> <span class="operator">=</span> input.substring(<span class="number">5</span>, input.length() - <span class="number">1</span>);</span><br><span class="line"><span class="type">byte</span>[] transformed = CryptoEngine.performTransformation(inner);</span><br><span class="line"><span class="keyword">return</span> mainActivity.nativeVerify(transformed);</span><br></pre></td></tr></table></figure>
+
+<h3 id="3-2-performTransformation-分析"><a href="#3-2-performTransformation-分析" class="headerlink" title="3.2 performTransformation 分析"></a>3.2 performTransformation 分析</h3><p>这个函数是整题最关键的 Java 变换。它对输入字符串逐字节处理。</p>
+<p>逆出来的逻辑如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">byte</span>[] src = input.getBytes(StandardCharsets.US_ASCII);</span><br><span class="line"><span class="type">byte</span>[] out = <span class="keyword">new</span> <span class="title class_">byte</span>[src.length];</span><br><span class="line"><span class="type">int</span> <span class="variable">prev</span> <span class="operator">=</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">0</span>; i &lt; src.length; i++) &#123;</span><br><span class="line">    <span class="type">int</span> <span class="variable">v</span> <span class="operator">=</span> src[i] &amp; <span class="number">0xff</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (<span class="number">32</span> &lt;= v &amp;&amp; v &lt;= <span class="number">126</span>) &#123;</span><br><span class="line">        v = ((v - <span class="number">25</span>) % <span class="number">95</span>) + <span class="number">32</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> <span class="variable">delta</span> <span class="operator">=</span> (i % <span class="number">2</span> == <span class="number">0</span>) ? <span class="number">8</span> : -<span class="number">8</span>;</span><br><span class="line">    v = (v + delta + (prev % <span class="number">4</span>)) &amp; <span class="number">0xff</span>;</span><br><span class="line"></span><br><span class="line">    out[i] = (<span class="type">byte</span>) v;</span><br><span class="line">    prev = v;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个变换有三个特点：</p>
+<ol>
+<li>先对可打印 ASCII 做一个循环位移</li>
+<li>偶数位加 8，奇数位减 8</li>
+<li>每一位都依赖前一位输出的 <code>prev % 4</code></li>
+</ol>
+<p>第三点很重要，因为这意味着它不是完全独立的逐字符变换，而是带有前向链式依赖。</p>
+<h2 id="4-JNI-层分析"><a href="#4-JNI-层分析" class="headerlink" title="4. JNI 层分析"></a>4. JNI 层分析</h2><h3 id="4-1-nativeVerify-注册"><a href="#4-1-nativeVerify-注册" class="headerlink" title="4.1 nativeVerify 注册"></a>4.1 nativeVerify 注册</h3><p>在 <code>JNI_OnLoad</code> 中可以看到，程序动态注册了 <code>MainActivity.nativeVerify([B)Z</code>。</p>
+<p>进一步追踪可知它最终会调用 native 函数：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SV::v(unsigned char const*, int)</span><br></pre></td></tr></table></figure>
+
+<p>这是最终校验函数。</p>
+<h3 id="4-2-native-校验主流程"><a href="#4-2-native-校验主流程" class="headerlink" title="4.2 native 校验主流程"></a>4.2 native 校验主流程</h3><p>把 <code>SV::v</code> 的逻辑整理后，流程其实很直接：</p>
+<ol>
+<li>复制输入字节</li>
+<li>调用 <code>process_fib_stream</code></li>
+<li>调用 <code>encode_b64</code></li>
+<li>将结果与一个固定字符串比较</li>
+</ol>
+<p>可以写成伪代码：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">bool</span> <span class="title">verify</span><span class="params">(<span class="type">const</span> <span class="type">uint8_t</span>* data, <span class="type">int</span> len)</span> </span>&#123;</span><br><span class="line">    <span class="function">vector&lt;<span class="type">uint8_t</span>&gt; <span class="title">buf</span><span class="params">(data, data + len)</span></span>;</span><br><span class="line">    <span class="built_in">process_fib_stream</span>(buf.<span class="built_in">data</span>(), len);</span><br><span class="line">    string encoded = <span class="built_in">encode_b64</span>(buf);</span><br><span class="line">    <span class="keyword">return</span> encoded == <span class="string">&quot;cUdltutGeWWIUm+7OE4ce3wi&quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>所以 JNI 层的目标值就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cUdltutGeWWIUm+7OE4ce3wi</span><br></pre></td></tr></table></figure>
+
+<h2 id="5-Native-细节还原"><a href="#5-Native-细节还原" class="headerlink" title="5. Native 细节还原"></a>5. Native 细节还原</h2><h3 id="5-1-Fibonacci-XOR"><a href="#5-1-Fibonacci-XOR" class="headerlink" title="5.1 Fibonacci XOR"></a>5.1 Fibonacci XOR</h3><p><code>process_fib_stream</code> 的逻辑是：用 Fibonacci 序列逐字节异或输入。</p>
+<p>序列从下面开始：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">1, 1, 2, 3, 5, 8, 13, 21, ...</span><br></pre></td></tr></table></figure>
+
+<p>按字节取值，超过 255 就模 256。</p>
+<p>伪代码：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">fib[<span class="number">0</span>] = <span class="number">1</span>;</span><br><span class="line">fib[<span class="number">1</span>] = <span class="number">1</span>;</span><br><span class="line">fib[i] = (fib[i - <span class="number">1</span>] + fib[i - <span class="number">2</span>]) &amp; <span class="number">0xff</span>;</span><br><span class="line"></span><br><span class="line">data[i] ^= fib[i];</span><br></pre></td></tr></table></figure>
+
+<p>这个过程是可逆的，因为 XOR 同一个序列两次就能还原。</p>
+<h3 id="5-2-Base64-不是标准表"><a href="#5-2-Base64-不是标准表" class="headerlink" title="5.2 Base64 不是标准表"></a>5.2 Base64 不是标准表</h3><p>native 里后续调用了一个 Base64 编码函数，但直接拿标准 Base64 去解目标串会发现结果不对。</p>
+<p>继续分析字符串和编码表初始化逻辑，可以定位到自定义字典：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">zKJUExRaVtM3Ydv5TQIsWD1frnHC78Lckl6euPh9AGoj0SgN4Zp+OwXi2F/ybmBq</span><br></pre></td></tr></table></figure>
+
+<p>也就是说题目不是标准 Base64，而是“自定义 alphabet 的 Base64”。</p>
+<p>这一点是题目 native 部分最关键的坑。</p>
+<h2 id="6-逆向求解思路"><a href="#6-逆向求解思路" class="headerlink" title="6. 逆向求解思路"></a>6. 逆向求解思路</h2><p>到这里校验链已经完整：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">flag 内部字符串</span><br><span class="line">-&gt; Java performTransformation</span><br><span class="line">-&gt; Fibonacci XOR</span><br><span class="line">-&gt; 自定义 Base64</span><br><span class="line">-&gt; 与 &quot;cUdltutGeWWIUm+7OE4ce3wi&quot; 比较</span><br></pre></td></tr></table></figure>
+
+<p>所以逆向时只要按相反顺序还原即可：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">目标串</span><br><span class="line">-&gt; 自定义 Base64 解码</span><br><span class="line">-&gt; 再做一次 Fibonacci XOR</span><br><span class="line">-&gt; 逆推 Java transform</span><br><span class="line">-&gt; 得到花括号内部字符串</span><br></pre></td></tr></table></figure>
+
+<h2 id="7-逆向还原过程"><a href="#7-逆向还原过程" class="headerlink" title="7. 逆向还原过程"></a>7. 逆向还原过程</h2><h3 id="7-1-先解自定义-Base64"><a href="#7-1-先解自定义-Base64" class="headerlink" title="7.1 先解自定义 Base64"></a>7.1 先解自定义 Base64</h3><p>目标串：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cUdltutGeWWIUm+7OE4ce3wi</span><br></pre></td></tr></table></figure>
+
+<p>用自定义字典解码后得到字节：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">7c33612642698d45120fdcdcd04c1f8cbd77</span><br></pre></td></tr></table></figure>
+
+<h3 id="7-2-再逆-Fibonacci-XOR"><a href="#7-2-再逆-Fibonacci-XOR" class="headerlink" title="7.2 再逆 Fibonacci XOR"></a>7.2 再逆 Fibonacci XOR</h3><p>由于 XOR 可逆，重新异或同样的 Fibonacci 序列即可得到 Java 层输出：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">7d326325476180503038854c39357d57806f</span><br></pre></td></tr></table></figure>
+
+<h3 id="7-3-逆推-Java-变换"><a href="#7-3-逆推-Java-变换" class="headerlink" title="7.3 逆推 Java 变换"></a>7.3 逆推 Java 变换</h3><p>对于第 <code>i</code> 个字节，已知：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">cur = transformed[i]</span><br><span class="line">prev = transformed[i - 1]</span><br></pre></td></tr></table></figure>
+
+<p>我们可以枚举所有可打印 ASCII <code>32..126</code>，看哪个字符经过 Java 变换后恰好得到 <code>cur</code>。</p>
+<p>由于这一题每个位置都只有唯一解，所以可以顺序逆推出整个字符串。</p>
+<p>最终还原出的花括号内部内容是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">n2R#7_pQ!9vL*5mWnp</span><br></pre></td></tr></table></figure>
+
+<p>所以最终 flag 为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ISCC&#123;n2R#7_pQ!9vL*5mWnp&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="8-验证"><a href="#8-验证" class="headerlink" title="8. 验证"></a>8. 验证</h2><p>正向重新跑一遍完整链：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">n2R#7_pQ!9vL*5mWnp</span><br><span class="line">-&gt; Java transform</span><br><span class="line">-&gt; Fibonacci XOR</span><br><span class="line">-&gt; custom Base64</span><br></pre></td></tr></table></figure>
+
+<p>最终可以再次得到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cUdltutGeWWIUm+7OE4ce3wi</span><br></pre></td></tr></table></figure>
+
+<p>与 native 中的目标串完全一致，因此结果正确。</p>
+<h2 id="9-解题脚本"><a href="#9-解题脚本" class="headerlink" title="9. 解题脚本"></a>9. 解题脚本</h2><p>我已经把通解脚本整理到了：</p>
+<ul>
+<li><a href="C:\Users\jianr\Documents\Codex\2026-05-09\files-mentioned-by-the-user-app\solve_flag.py">solve_flag.py</a></li>
+</ul>
+<p>运行方式：</p>
+<figure class="highlight powershell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">python C:\Users\jianr\Documents\Codex\<span class="number">2026</span><span class="literal">-05-09</span>\files<span class="literal">-mentioned-by-the-user-app</span>\solve_flag.py</span><br></pre></td></tr></table></figure>
+
+<p>输出：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">ISCC&#123;n2R#7_pQ!9vL*5mWnp&#125;</span><br><span class="line">verified: True</span><br></pre></td></tr></table></figure>
+
+<h2 id="10-这题的考点总结"><a href="#10-这题的考点总结" class="headerlink" title="10. 这题的考点总结"></a>10. 这题的考点总结</h2><p>这题整体不难，但坑点设计得比较完整，主要考这些内容：</p>
+<ol>
+<li>Android 事件流分析</li>
+<li>识别假逻辑和真逻辑</li>
+<li>Java 层字节变换还原</li>
+<li>JNI 注册与 native 校验追踪</li>
+<li>自定义 Base64 字典识别</li>
+<li>XOR&#x2F;Fibonacci 流逆向</li>
+</ol>
+<p>如果只看 UI 点击结果，很容易被假 hash 逻辑带偏；如果只把目标串当标准 Base64 去解，也会走歪。真正做通之后，会发现整条链其实比较工整，适合作为一道 Android + JNI 入门逆向题。</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="http://example.com">Ro0t</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="http://example.com/2026/05/09/%E6%93%82%E5%8F%B0mobile_wp/">http://example.com/2026/05/09/%E6%93%82%E5%8F%B0mobile_wp/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="http://example.com" target="_blank">Ro0t's Blog</a>！</span></div></div><div class="tag_share"><div class="post-share"><div class="social-share" data-image="/img/re.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/05/09/%E6%93%82%E5%8F%B0re_WP/" title=""><img class="cover" src="/img/re.jpg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of previous post"><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2"></div></div><div class="info-2"><div class="info-item-1">PixelMaze 逆向题 WP题目概况题目给了一个压缩包 Flag1.zip，解压后得到： 1PixelMaze.exe  先做基础信息和字符串分析： 12Expand-Archive .\Flag1.zip -DestinationPath .\Flag1_extractedstrings -a -td .\Flag1_extracted\PixelMaze.exe | rg &quot;ISCC|PixelMaze|Ente...</div></div></div></a><a class="pagination-related" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr"><img class="cover" src="/img/re.jpg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">再探Angr</div></div><div class="info-2"><div class="info-item-1">上一篇《初探Angr》里，我主要是把 angr 的几个基础对象讲清楚：Project、state、simulation_manager、claripy、solver、hook、SimProcedure。那篇更像是把工具箱打开，看看里面每个工具叫什么。 这一篇想继续往下走一点：不只会写 explore(find=..., avoid=...)，而是理解 angr 在实战里到底怎么建模、怎么控制路径、怎么处理复杂输入、怎么把漏洞利用条...</div></div></div></a></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Ro0t</div><div class="author-info-description">专注二进制安全、逆向分析与漏洞利用</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">12</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">5</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/Ro0t" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">This is my Blog</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#Android-Reverse-WP"><span class="toc-number">1.</span> <span class="toc-text">Android Reverse WP</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-%E9%A2%98%E7%9B%AE%E5%88%9D%E6%8E%A2"><span class="toc-number">1.1.</span> <span class="toc-text">1. 题目初探</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-Java-%E5%B1%82%E5%88%86%E6%9E%90"><span class="toc-number">1.2.</span> <span class="toc-text">2. Java 层分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1-MainActivity-%E7%9A%84%E5%85%B3%E9%94%AE%E7%82%B9"><span class="toc-number">1.2.1.</span> <span class="toc-text">2.1 MainActivity 的关键点</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-%E8%A1%A8%E9%9D%A2%E6%8C%89%E9%92%AE%E9%80%BB%E8%BE%91%E5%85%B6%E5%AE%9E%E6%98%AF%E7%83%9F%E9%9B%BE%E5%BC%B9"><span class="toc-number">1.2.2.</span> <span class="toc-text">2.2 表面按钮逻辑其实是烟雾弹</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-3-%E7%9C%9F%E6%AD%A3%E5%85%A5%E5%8F%A3%E6%98%AF%E2%80%9C%E9%95%BF%E6%8C%89%E2%80%9D"><span class="toc-number">1.2.3.</span> <span class="toc-text">2.3 真正入口是“长按”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-4-%E7%9C%9F%E6%AD%A3%E6%A0%A1%E9%AA%8C%E9%80%BB%E8%BE%91"><span class="toc-number">1.2.4.</span> <span class="toc-text">2.4 真正校验逻辑</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-Java-%E9%A2%84%E5%A4%84%E7%90%86%E7%AE%97%E6%B3%95"><span class="toc-number">1.3.</span> <span class="toc-text">3. Java 预处理算法</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1-doFinalCheck-%E7%9A%84%E9%80%BB%E8%BE%91"><span class="toc-number">1.3.1.</span> <span class="toc-text">3.1 doFinalCheck 的逻辑</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-2-performTransformation-%E5%88%86%E6%9E%90"><span class="toc-number">1.3.2.</span> <span class="toc-text">3.2 performTransformation 分析</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-JNI-%E5%B1%82%E5%88%86%E6%9E%90"><span class="toc-number">1.4.</span> <span class="toc-text">4. JNI 层分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#4-1-nativeVerify-%E6%B3%A8%E5%86%8C"><span class="toc-number">1.4.1.</span> <span class="toc-text">4.1 nativeVerify 注册</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-2-native-%E6%A0%A1%E9%AA%8C%E4%B8%BB%E6%B5%81%E7%A8%8B"><span class="toc-number">1.4.2.</span> <span class="toc-text">4.2 native 校验主流程</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-Native-%E7%BB%86%E8%8A%82%E8%BF%98%E5%8E%9F"><span class="toc-number">1.5.</span> <span class="toc-text">5. Native 细节还原</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#5-1-Fibonacci-XOR"><span class="toc-number">1.5.1.</span> <span class="toc-text">5.1 Fibonacci XOR</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#5-2-Base64-%E4%B8%8D%E6%98%AF%E6%A0%87%E5%87%86%E8%A1%A8"><span class="toc-number">1.5.2.</span> <span class="toc-text">5.2 Base64 不是标准表</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-%E9%80%86%E5%90%91%E6%B1%82%E8%A7%A3%E6%80%9D%E8%B7%AF"><span class="toc-number">1.6.</span> <span class="toc-text">6. 逆向求解思路</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#7-%E9%80%86%E5%90%91%E8%BF%98%E5%8E%9F%E8%BF%87%E7%A8%8B"><span class="toc-number">1.7.</span> <span class="toc-text">7. 逆向还原过程</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#7-1-%E5%85%88%E8%A7%A3%E8%87%AA%E5%AE%9A%E4%B9%89-Base64"><span class="toc-number">1.7.1.</span> <span class="toc-text">7.1 先解自定义 Base64</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#7-2-%E5%86%8D%E9%80%86-Fibonacci-XOR"><span class="toc-number">1.7.2.</span> <span class="toc-text">7.2 再逆 Fibonacci XOR</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#7-3-%E9%80%86%E6%8E%A8-Java-%E5%8F%98%E6%8D%A2"><span class="toc-number">1.7.3.</span> <span class="toc-text">7.3 逆推 Java 变换</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#8-%E9%AA%8C%E8%AF%81"><span class="toc-number">1.8.</span> <span class="toc-text">8. 验证</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#9-%E8%A7%A3%E9%A2%98%E8%84%9A%E6%9C%AC"><span class="toc-number">1.9.</span> <span class="toc-text">9. 解题脚本</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#10-%E8%BF%99%E9%A2%98%E7%9A%84%E8%80%83%E7%82%B9%E6%80%BB%E7%BB%93"><span class="toc-number">1.10.</span> <span class="toc-text">10. 这题的考点总结</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="NepCTF2026 ColorfulArray"/></a><div class="content"><a class="title" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray">NepCTF2026 ColorfulArray</a><time datetime="2026-10-15T18:50:00.000Z" title="发表于 2026-10-16 02:50:00">2026-10-16</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/05/09/web%E5%92%8Cpwn/" title="无标题"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="无标题"/></a><div class="content"><a class="title" href="/2026/05/09/web%E5%92%8Cpwn/" title="无标题">无标题</a><time datetime="2026-05-09T02:01:20.014Z" title="发表于 2026-05-09 10:01:20">2026-05-09</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/05/09/%E6%93%82%E5%8F%B0re_WP/" title="无标题"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="无标题"/></a><div class="content"><a class="title" href="/2026/05/09/%E6%93%82%E5%8F%B0re_WP/" title="无标题">无标题</a><time datetime="2026-05-09T01:31:50.119Z" title="发表于 2026-05-09 09:31:50">2026-05-09</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/05/09/%E6%93%82%E5%8F%B0mobile_wp/" title="无标题"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="无标题"/></a><div class="content"><a class="title" href="/2026/05/09/%E6%93%82%E5%8F%B0mobile_wp/" title="无标题">无标题</a><time datetime="2026-05-09T01:26:36.535Z" title="发表于 2026-05-09 09:26:36">2026-05-09</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr"><img src="/img/re.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="再探Angr"/></a><div class="content"><a class="title" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr">再探Angr</a><time datetime="2026-04-26T13:15:58.515Z" title="发表于 2026-04-26 21:15:58">2026-04-26</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Ro0t</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div><div class="footer_custom_text">Ro0t · Binary Security Blog</div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div></div></body></html>
