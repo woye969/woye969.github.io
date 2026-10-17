@@ -9,7 +9,7 @@
   var MAI = {
     name: '不知火舞',
     img: '/img/kof-mai.gif',
-    width: 150,
+    width: 130,
     lines: [
       "いっけー！（上吧！）",
       "花蝶扇！",
