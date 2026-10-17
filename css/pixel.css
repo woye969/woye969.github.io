@@ -1,6 +1,6 @@
 /* ============================================================
-   Ro0t's Blog — PIXEL / CRT-Terminal skin for Butterfly
-   终端绿配色 · 直角化 · 硬阴影 · 扫描线 · 像素字体
+   Ro0t's Blog — GAMEBOY Pixel skin for Butterfly
+   经典掌机四色 · 直角化 · 硬阴影 · 扫描线 · 像素字体
    ============================================================ */
 
 /* ---------- 像素字体（Fusion Pixel 12px proportional zh_hans） ---------- */
@@ -12,16 +12,16 @@
   font-display: swap;
 }
 
-/* ---------- 调色板变量 ---------- */
+/* ---------- GameBoy 四色调色板 ---------- */
 :root {
-  --px-bg: #0a0e0a;
-  --px-panel: #101610;
-  --px-green: #33ff66;
-  --px-green-dim: #1f9e46;
-  --px-green-dark: #0d3a1c;
-  --px-text: #c8f7d4;
-  --px-border: #33ff66;
-  --px-shadow: 4px 4px 0 #000;
+  --px-bg: #0f380f;          /* 最深绿：背景 */
+  --px-panel: #163d16;       /* 面板底 */
+  --px-green: #9bbc0f;       /* 最浅黄绿：主强调 */
+  --px-green-dim: #8bac0f;   /* 浅绿：次要强调 */
+  --px-green-dark: #306230;  /* 次深：hover/边框 */
+  --px-text: #b7d98a;        /* 正文可读色 */
+  --px-border: #8bac0f;
+  --px-shadow: 4px 4px 0 #071d07;
   --px-font: 'Fusion Pixel', 'Courier New', monospace;
 }
 
@@ -91,7 +91,7 @@ body {
 
 /* ---------- 顶部导航 ---------- */
 #nav {
-  background: rgba(10, 14, 10, .92) !important;
+  background: rgba(15, 56, 15, .94) !important;
   box-shadow: 0 3px 0 var(--px-green-dark) !important;
   backdrop-filter: none;
 }
@@ -172,7 +172,7 @@ body {
   border-radius: 0 !important;
   border: 2px solid var(--px-green-dark) !important;
   box-shadow: var(--px-shadow) !important;
-  background: #050705 !important;
+  background: #0a2a0a !important;
 }
 #article-container figure.highlight table::before,
 .code-img {
@@ -182,7 +182,7 @@ body {
 #article-container pre code {
   font-family: 'Cascadia Code', 'Consolas', monospace !important;
   font-size: 13px;
-  color: #b9ffcc;
+  color: #b7d98a;
 }
 #article-container figure.highlight .gutter pre .line {
   color: var(--px-green-dim) !important;
@@ -295,7 +295,7 @@ kbd {
 
 /* ---------- 页脚 ---------- */
 #footer {
-  background: #050705 !important;
+  background: #0a2a0a !important;
   border-top: 2px solid var(--px-green-dark);
 }
 #footer:before {
@@ -316,7 +316,7 @@ kbd {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #050705;
+  background: #0a2a0a;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--px-green-dark);
@@ -411,7 +411,7 @@ kbd {
   font-size: 13px;
   line-height: 1.5;
   color: var(--px-green);
-  background: #050705;
+  background: #0a2a0a;
   border: 2px solid var(--px-green);
   box-shadow: 3px 3px 0 #000;
   opacity: 0;
@@ -439,7 +439,7 @@ kbd {
   font-family: var(--px-font);
   font-size: 12px;
   color: var(--px-green);
-  background: #050705;
+  background: #0a2a0a;
   border: 1px solid var(--px-green-dim);
   padding: 1px 8px;
   cursor: pointer;
