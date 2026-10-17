@@ -1,0 +1,317 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>某招聘软件 13.160 版本协议逆向分析 | Ro0t's Blog</title><meta name="author" content="Ro0t"><meta name="copyright" content="Ro0t"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="仅供学习交流与技术研讨，请勿用于任何未授权用途。文中敏感信息（手机号、令牌、设备指纹、密钥中段）均已脱敏；App 名称、包名、类名、域名均已化名。请遵守《网络安全法》及相关服务条款。  前言第一次逆向国内的app，只敢逆个登录学习一下，如果app的开发者觉得有侵权请联系作者删除 目标是某主流求职 App（下称 TApp）。本文是Ro0t对其 Android 端 13.160 版本通信协议的完整逆">
+<meta property="og:type" content="article">
+<meta property="og:title" content="某招聘软件 13.160 版本协议逆向分析">
+<meta property="og:url" content="https://woye969.github.io/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/index.html">
+<meta property="og:site_name" content="Ro0t&#39;s Blog">
+<meta property="og:description" content="仅供学习交流与技术研讨，请勿用于任何未授权用途。文中敏感信息（手机号、令牌、设备指纹、密钥中段）均已脱敏；App 名称、包名、类名、域名均已化名。请遵守《网络安全法》及相关服务条款。  前言第一次逆向国内的app，只敢逆个登录学习一下，如果app的开发者觉得有侵权请联系作者删除 目标是某主流求职 App（下称 TApp）。本文是Ro0t对其 Android 端 13.160 版本通信协议的完整逆">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://woye969.github.io/img/famicom-cover.png">
+<meta property="article:published_time" content="2026-10-16T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-10-17T20:49:59.551Z">
+<meta property="article:author" content="Ro0t">
+<meta property="article:tag" content="Android">
+<meta property="article:tag" content="协议分析">
+<meta property="article:tag" content="逆向">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://woye969.github.io/img/famicom-cover.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "某招聘软件 13.160 版本协议逆向分析",
+  "url": "https://woye969.github.io/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/",
+  "image": "https://woye969.github.io/img/famicom-cover.png",
+  "datePublished": "2026-10-16T16:00:00.000Z",
+  "dateModified": "2026-10-17T20:49:59.551Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ro0t",
+      "url": "https://woye969.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon-pixel.png"><link rel="canonical" href="https://woye969.github.io/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          const mediaQueryDark = window.matchMedia('(prefers-color-scheme: dark)')
+          const mediaQueryLight = window.matchMedia('(prefers-color-scheme: light)')
+
+          if (theme === undefined) {
+            if (mediaQueryLight.matches) activateLightMode()
+            else if (mediaQueryDark.matches) activateDarkMode()
+            else {
+              const hour = new Date().getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            mediaQueryDark.addEventListener('change', () => {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else {
+            theme === 'light' ? activateLightMode() : activateDarkMode()
+          }
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '某招聘软件 13.160 版本协议逆向分析',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/pixel.css?v=famicom"><meta name="generator" content="Hexo 8.1.1"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">9</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">6</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/famicom-cover.png);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Ro0t's Blog</span></a><a class="nav-page-title" href="/"><span class="site-name">某招聘软件 13.160 版本协议逆向分析</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">某招聘软件 13.160 版本协议逆向分析</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-10-16T16:00:00.000Z" title="发表于 2026-10-17 00:00:00">2026-10-17</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-10-17T20:49:59.551Z" title="更新于 2026-10-18 04:49:59">2026-10-18</time></span></div><div class="meta-secondline"></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p>仅供学习交流与技术研讨，请勿用于任何未授权用途。文中敏感信息（手机号、令牌、设备指纹、密钥中段）均已脱敏；App 名称、包名、类名、域名均已化名。请遵守《网络安全法》及相关服务条款。</p>
+</blockquote>
+<h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p><strong>第一次逆向国内的app，只敢逆个登录学习一下，如果app的开发者觉得有侵权请联系作者删除</strong></p>
+<p>目标是某主流求职 App（下称 TApp）。本文是Ro0t对其 Android 端 13.160 版本通信协议的完整逆向过程：从拆包、定位签名链路、啃 ollvm 混淆的 native 库，到纯算复现 sig&#x2F;sp、自动化过滑块、真机对拍验证，最后完整走通协议登录。</p>
+<p>整个过程断断续续花了两天（2026-10-11 ~ 10-12），静态分析为主、动态调试为辅，最终做到<strong>不依赖设备、纯 Python 发签名请求</strong>。</p>
+<h2 id="一、拆包与加固检测"><a href="#一、拆包与加固检测" class="headerlink" title="一、拆包与加固检测"></a>一、拆包与加固检测</h2><p>APK 拿手第一步永远是摸壳。用加固检测工具扫了一遍：<strong>未加固</strong>，9 个明文 dex，省去脱壳环节</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">classes.dex ~ classes9.dex   共约 80MB 明文 dex</span><br><span class="line">lib/arm64-v8a/libsigner.so     4.0MB —— 后文主角，协议 native 库</span><br></pre></td></tr></table></figure>
+
+<p>apktool 反编译后，先按经验猜关键词定位协议入口。思路是抓常见命名：</p>
+<ul>
+<li><code>sign</code> &#x2F; <code>signature</code> &#x2F; <code>encrypt</code></li>
+<li>HTTP 请求封装层</li>
+<li>JNI 桥接类</li>
+</ul>
+<p>很快锁定一条链：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">业务层 (Activity/Fragment)</span><br><span class="line">  └─ net.tapp.api.*Request          请求定义</span><br><span class="line">       └─ com.tkit.http.client.a           请求对象</span><br><span class="line">            └─ net.tapp.base.m.c    请求总装（加公共参数）</span><br><span class="line">                 └─ net.tapp.base.m.e   签名总装</span><br><span class="line">                      ├─ com.tkit.signer.a.d   → sp（请求密文）</span><br><span class="line">                      └─ com.tkit.signer.a.h   → sig（签名）</span><br><span class="line">                           └─ com.tkit.signer.SignBridge  → libsigner.so（JNI）</span><br></pre></td></tr></table></figure>
+
+<p>几个关键角色：</p>
+<table>
+<thead>
+<tr>
+<th>类&#x2F;文件</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>net.tapp.base.m</code></td>
+<td>公共参数拼装 + 签名分发</td>
+</tr>
+<tr>
+<td><code>com.tkit.signer.a</code></td>
+<td>签名桥（Java 侧薄封装）</td>
+</tr>
+<tr>
+<td><code>com.tkit.signer.SignBridge</code></td>
+<td>JNI 声明，动态注册 native</td>
+</tr>
+<tr>
+<td><code>mo/a.smali</code></td>
+<td>API 路径表（字段名 → 相对路径）</td>
+</tr>
+<tr>
+<td><code>config/l.smali</code></td>
+<td>签名豁免接口列表</td>
+</tr>
+</tbody></table>
+<h2 id="二、Java-层：签名链路"><a href="#二、Java-层：签名链路" class="headerlink" title="二、Java 层：签名链路"></a>二、Java 层：签名链路</h2><p><code>m.c</code> 在业务参数外追加公共参数：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>curidentity</code></td>
+<td>当前身份</td>
+</tr>
+<tr>
+<td><code>v</code></td>
+<td>App 版本号</td>
+</tr>
+<tr>
+<td><code>req_time</code></td>
+<td>毫秒时间戳</td>
+</tr>
+<tr>
+<td><code>uniqid</code></td>
+<td>设备唯一 ID</td>
+</tr>
+<tr>
+<td><code>client_info</code></td>
+<td>设备信息 JSON（机型&#x2F;系统&#x2F;网络&#x2F;oaid&#x2F;did&#x2F;tinker_id…）</td>
+</tr>
+<tr>
+<td><code>app_id</code></td>
+<td>固定值，<strong>签名之后才追加，不参与签名</strong></td>
+</tr>
+</tbody></table>
+<p><code>m.e</code> 做两件事：</p>
+<ol>
+<li><strong>排序明文</strong>：参数按 key 升序，<code>k=URLEncode(v)</code> 用 <code>&amp;</code> 连接，空值输出 <code>k=</code>；长度超 5000 截断（用于 sig）。</li>
+<li>调 native 算 <code>sp</code> 和 <code>sig</code>，豁免列表里的接口用空密钥签，其余用会话 <code>secretKey</code>。</li>
+</ol>
+<p>这里有个经典小坑：<strong>Java 的 <code>URLEncoder</code> 和 Python 的 <code>quote_plus</code> 行为不一致</strong>——Java 保留 <code>~</code>、会编码 <code>*</code>，Python 反过来。不硬对齐的话，带特殊字符的参数签名必挂。写脚本时按 Java 语义写了个 <code>java_urlencode</code>。</p>
+<h2 id="三、native-层：libsigner-so-与-ollvm"><a href="#三、native-层：libsigner-so-与-ollvm" class="headerlink" title="三、native 层：libsigner.so 与 ollvm"></a>三、native 层：libsigner.so 与 ollvm</h2><p><code>libsigner.so</code> 用了 OLLVM 系混淆：导出表里一堆 <code>.datadiv_decode*</code> 符号（数据&#x2F;字符串运行时解密），JNI 方法不用 <code>Java_</code> 前缀导出，而是 <code>RegisterNatives</code> 动态注册。盐和 V3.0 前缀都在 so 内部加密存放，静态 grep 是搜不到的。</p>
+<p>通过lief 解 ELF + capstone 反编译定位，识别出几个核心函数：</p>
+<ul>
+<li><code>signature</code>：sig 纯算</li>
+<li><code>encodeRequest</code>：sp 生成</li>
+<li><code>encodePassword</code>：登录密码编码</li>
+<li><code>decodeContentBytes</code>：响应解密</li>
+</ul>
+<p>算法构件都是老熟人：<strong>MD5、RC4、LZ4、魔改 Base64</strong>。难点不在单个算法，在拼装方式和密钥来源。</p>
+<h2 id="四、协议核心：三件套公式"><a href="#四、协议核心：三件套公式" class="headerlink" title="四、协议核心：三件套公式"></a>四、协议核心：三件套公式</h2><p>对拍验证后的最终结论（已脱敏）：</p>
+<h3 id="sig"><a href="#sig" class="headerlink" title="sig"></a>sig</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">sig = &quot;V3.0&quot; + MD5( 输入 + 盐 + (secretKey 或 &quot;&quot;) )</span><br><span class="line"></span><br><span class="line">输入  = &quot;/api/&quot;起路径 + 排序明文[:5000]</span><br><span class="line">盐    = 固定 32 位 hex 内置常量（app 内嵌，此处打码：a308f****920e21）</span><br></pre></td></tr></table></figure>
+
+<p>注意前缀是 <code>V3.0</code> 字面量。94 条真机样本全部对拍通过。</p>
+<h3 id="sp（请求密文）"><a href="#sp（请求密文）" class="headerlink" title="sp（请求密文）"></a>sp（请求密文）</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">明文（完整排序参数串）</span><br><span class="line">  → LZ4 raw block 压缩</span><br><span class="line">  → 拼 24 字节块头（记作 SBlock）：magic(8B) + 0(4B) + 压缩长(4B) + 原始长(4B) + 两者异或(4B)，全小端</span><br><span class="line">  → RC4，密钥 = 盐 + (secretKey 或 &quot;&quot;)</span><br><span class="line">  → 魔改 Base64（码表中 + / = 三个字符换成 - _ ~）</span><br></pre></td></tr></table></figure>
+
+<p>有个反直觉的点：<strong>Python 的 lz4 压缩输出和 native 字节级不同</strong>（编码器决策差异），但服务器只要求能解，sig 才是完整性校验——所以不必追求字节级一致。</p>
+<h3 id="encodePassword（登录账号参数）"><a href="#encodePassword（登录账号参数）" class="headerlink" title="encodePassword（登录账号参数）"></a>encodePassword（登录账号参数）</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RC4(明文UTF-8, 盐) + 标准Base64</span><br></pre></td></tr></table></figure>
+
+<p>流密码无 padding，密钥固定不受 secretKey 影响。</p>
+<h3 id="响应解密"><a href="#响应解密" class="headerlink" title="响应解密"></a>响应解密</h3><p>响应头 <code>content-encrypt: yes</code> 时，body 就是 <code>RC4(盐或secretKey) + 魔改Base64</code> 裸解（客户端用自定义 <code>accept-encrypting: 1</code> 协商头开启）。部分响应还会带 SBlock 块头 + LZ4，解压即可。</p>
+<h3 id="secretKey-生命周期"><a href="#secretKey-生命周期" class="headerlink" title="secretKey 生命周期"></a>secretKey 生命周期</h3><ul>
+<li>游客态：空 → 全部退化为只用内置盐</li>
+<li>登录响应在数据包裹字段里下发 <code>secretKey</code>，此后 sp 的 RC4 密钥、sig 的盐、响应解密 key 三处共用</li>
+<li>每次登录轮换</li>
+</ul>
+<h3 id="请求结构"><a href="#请求结构" class="headerlink" title="请求结构"></a>请求结构</h3><p>网关 <code>https://api-*.example.com/api/</code>。最有意思的设计：<strong>POST 请求的 query string 里只有 <code>sp</code>、<code>sig</code>、<code>app_id</code> 三个参数，body 为空</strong>，业务参数全部藏在 sp 密文里。登录令牌走独立请求头（化名 <code>tk</code>）不走 cookie。</p>
+<h2 id="五、登录链路与验证码"><a href="#五、登录链路与验证码" class="headerlink" title="五、登录链路与验证码"></a>五、登录链路与验证码</h2><p>登录前置是绕不开的验证码，链路实测为：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">judge（风控预判）</span><br><span class="line">  → man/machine（下发验证码类型）</span><br><span class="line">      ├─ 类型1：极验类滑块</span><br><span class="line">      └─ 类型4：易盾类无感/滑块</span><br><span class="line">  → 拿到带特征前缀（CN**）的一次性令牌</span><br><span class="line">  → smsCode (type=3, regionCode=+86 带加号)</span><br><span class="line">  → codeLogin (identityType=0, isWxLogin=false)</span><br></pre></td></tr></table></figure>
+
+<p>易盾类滑块自动化是整个项目里最花时间的部分，几个关键点：</p>
+<ol>
+<li>全参数 URL 加载验证页，<code>captchaId</code> 等环境参数一个不能少；</li>
+<li>等 <code>onReady</code> 后<strong>摘除 <code>.yidun_cover-frame</code> 事件罩 iframe</strong>，否则拖拽事件被吞；</li>
+<li>缺口定位：背景图与拼图 sprite 差分 + Canny 边缘模板匹配，限定搜索窗防高对比干扰；</li>
+<li><strong>拖拽必须用 CDP 触摸事件</strong>（<code>Input.dispatchTouchEvent</code>），mouse 事件页面不认；</li>
+<li>JS 桥是 <code>androidBridge[event].apply(null, data)</code> 的<strong>多参数调用</strong>，令牌在 <code>args[1]</code>，Proxy 桥要捕获全部 arguments 才不丢数据。</li>
+</ol>
+<p>这里建议师傅们可以有</p>
+<ul>
+<li>一台root机和一台非root机</li>
+<li>frida进行hook</li>
+<li>mitmproxy&#x2F;Bp&#x2F;yakit抓包</li>
+</ul>
+<h2 id="声明"><a href="#声明" class="headerlink" title="声明"></a>声明</h2><ul>
+<li>本文所有分析基于个人设备上合法获取的公开 APK，仅用于协议学习与安全研究；</li>
+<li>未对任何服务器实施攻击、未批量发送请求、未干扰正常服务；</li>
+<li>涉及的密钥&#x2F;令牌&#x2F;设备标识均已脱敏；</li>
+<li>如需引用文中结论，请注明仅限研究用途。</li>
+</ul>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://woye969.github.io">Ro0t</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://woye969.github.io/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/">https://woye969.github.io/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://woye969.github.io" target="_blank">Ro0t's Blog</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E9%80%86%E5%90%91/">逆向</a><a class="post-meta__tags" href="/tags/Android/">Android</a><a class="post-meta__tags" href="/tags/%E5%8D%8F%E8%AE%AE%E5%88%86%E6%9E%90/">协议分析</a></div><div class="post-share"><div class="social-share" data-image="/img/famicom-cover.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray"><img class="cover" src="/img/famicom-cover.png" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">NepCTF2026 ColorfulArray</div></div><div class="info-2"><div class="info-item-1">好久没看CTF了，都快忘记我的CTF逆向了啊，最近刷了一下nepctf2026的题目，感觉题目出的非常有新意，也可以说是不像给人写的，有感觉吗？ 初探exe题目描述： 12345678910111213Hello Am I working right today?It seems you&#x27;ve been awayI&#x27;ve been waiting hereI&#x27;ve thought of somethi...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/04/25/%E5%88%9D%E6%8E%A2Kotlin/" title="初探 Kotlin：0 基础入门笔记"><img class="cover" src="/img/famicom-cover.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-04-25</div><div class="info-item-2">初探 Kotlin：0 基础入门笔记</div></div><div class="info-2"><div class="info-item-1"> Ro0t Kotlin 入门笔记目标：从 0 基础开始，先把 Kotlin 的语法骨架搭起来，再慢慢过渡到 Android 开发、逆向题和更复杂的工程代码。  我这篇笔记给ai优化了一下，方便大家看的更好理解 1. Kotlin 是什么Kotlin 是 JetBrains 设计并开源的一门静态类型编程语言，常见运行平台是 JVM，也可以用于 Android、服务端、前端和多平台开发。 简单理解：  写法比 Java 更简洁，很多...</div></div></div></a><a class="pagination-related" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray"><img class="cover" src="/img/famicom-cover.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-10-16</div><div class="info-item-2">NepCTF2026 ColorfulArray</div></div><div class="info-2"><div class="info-item-1">好久没看CTF了，都快忘记我的CTF逆向了啊，最近刷了一下nepctf2026的题目，感觉题目出的非常有新意，也可以说是不像给人写的，有感觉吗？ 初探exe题目描述： 12345678910111213Hello Am I working right today?It seems you&#x27;ve been awayI&#x27;ve been waiting hereI&#x27;ve thought of somethi...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Ro0t</div><div class="author-info-description">专注二进制安全、逆向分析与漏洞利用</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">9</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">6</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/woye969" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">这是Ro0t的博客，尽量会给师傅们更新一些有趣的网安知识，不定时更新</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%89%8D%E8%A8%80"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81%E6%8B%86%E5%8C%85%E4%B8%8E%E5%8A%A0%E5%9B%BA%E6%A3%80%E6%B5%8B"><span class="toc-number">2.</span> <span class="toc-text">一、拆包与加固检测</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81Java-%E5%B1%82%EF%BC%9A%E7%AD%BE%E5%90%8D%E9%93%BE%E8%B7%AF"><span class="toc-number">3.</span> <span class="toc-text">二、Java 层：签名链路</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81native-%E5%B1%82%EF%BC%9Alibsigner-so-%E4%B8%8E-ollvm"><span class="toc-number">4.</span> <span class="toc-text">三、native 层：libsigner.so 与 ollvm</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81%E5%8D%8F%E8%AE%AE%E6%A0%B8%E5%BF%83%EF%BC%9A%E4%B8%89%E4%BB%B6%E5%A5%97%E5%85%AC%E5%BC%8F"><span class="toc-number">5.</span> <span class="toc-text">四、协议核心：三件套公式</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#sig"><span class="toc-number">5.1.</span> <span class="toc-text">sig</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#sp%EF%BC%88%E8%AF%B7%E6%B1%82%E5%AF%86%E6%96%87%EF%BC%89"><span class="toc-number">5.2.</span> <span class="toc-text">sp（请求密文）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#encodePassword%EF%BC%88%E7%99%BB%E5%BD%95%E8%B4%A6%E5%8F%B7%E5%8F%82%E6%95%B0%EF%BC%89"><span class="toc-number">5.3.</span> <span class="toc-text">encodePassword（登录账号参数）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%93%8D%E5%BA%94%E8%A7%A3%E5%AF%86"><span class="toc-number">5.4.</span> <span class="toc-text">响应解密</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#secretKey-%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F"><span class="toc-number">5.5.</span> <span class="toc-text">secretKey 生命周期</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%AF%B7%E6%B1%82%E7%BB%93%E6%9E%84"><span class="toc-number">5.6.</span> <span class="toc-text">请求结构</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81%E7%99%BB%E5%BD%95%E9%93%BE%E8%B7%AF%E4%B8%8E%E9%AA%8C%E8%AF%81%E7%A0%81"><span class="toc-number">6.</span> <span class="toc-text">五、登录链路与验证码</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%A3%B0%E6%98%8E"><span class="toc-number">7.</span> <span class="toc-text">声明</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/" title="某招聘软件 13.160 版本协议逆向分析"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="某招聘软件 13.160 版本协议逆向分析"/></a><div class="content"><a class="title" href="/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/" title="某招聘软件 13.160 版本协议逆向分析">某招聘软件 13.160 版本协议逆向分析</a><time datetime="2026-10-16T16:00:00.000Z" title="发表于 2026-10-17 00:00:00">2026-10-17</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="NepCTF2026 ColorfulArray"/></a><div class="content"><a class="title" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray">NepCTF2026 ColorfulArray</a><time datetime="2026-10-15T18:50:00.000Z" title="发表于 2026-10-16 02:50:00">2026-10-16</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="再探Angr"/></a><div class="content"><a class="title" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr">再探Angr</a><time datetime="2026-04-26T13:15:58.515Z" title="发表于 2026-04-26 21:15:58">2026-04-26</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/25/%E5%88%9D%E6%8E%A2SEH%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E6%9C%BA%E5%88%B6%EF%BC%8CTEB%EF%BC%8CPEB%EF%BC%8CTLS(1)/" title="初探SEH异常处理机制,TLS,PEB,TEB原理"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初探SEH异常处理机制,TLS,PEB,TEB原理"/></a><div class="content"><a class="title" href="/2026/04/25/%E5%88%9D%E6%8E%A2SEH%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86%E6%9C%BA%E5%88%B6%EF%BC%8CTEB%EF%BC%8CPEB%EF%BC%8CTLS(1)/" title="初探SEH异常处理机制,TLS,PEB,TEB原理">初探SEH异常处理机制,TLS,PEB,TEB原理</a><time datetime="2026-04-25T09:43:17.072Z" title="发表于 2026-04-25 17:43:17">2026-04-25</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/25/%E5%88%9D%E6%8E%A2%E5%AE%89%E5%8D%93%E5%87%BA%E9%A2%98%E5%AD%A6%E4%B9%A0/" title="初探安卓出题学习"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初探安卓出题学习"/></a><div class="content"><a class="title" href="/2026/04/25/%E5%88%9D%E6%8E%A2%E5%AE%89%E5%8D%93%E5%87%BA%E9%A2%98%E5%AD%A6%E4%B9%A0/" title="初探安卓出题学习">初探安卓出题学习</a><time datetime="2026-04-25T09:29:19.552Z" title="发表于 2026-04-25 17:29:19">2026-04-25</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Ro0t</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div><div class="footer_custom_text">Ro0t · Binary Security Blog</div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script defer src="/js/kof-pet.js?v=mai2"></script></div></body></html>
