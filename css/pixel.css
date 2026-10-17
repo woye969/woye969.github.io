@@ -1,0 +1,454 @@
+/* ============================================================
+   Ro0t's Blog — PIXEL / CRT-Terminal skin for Butterfly
+   终端绿配色 · 直角化 · 硬阴影 · 扫描线 · 像素字体
+   ============================================================ */
+
+/* ---------- 像素字体（Fusion Pixel 12px proportional zh_hans） ---------- */
+@font-face {
+  font-family: 'Fusion Pixel';
+  src: url('/fonts/fusion-pixel-12px-proportional-zh_hans.ttf.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- 调色板变量 ---------- */
+:root {
+  --px-bg: #0a0e0a;
+  --px-panel: #101610;
+  --px-green: #33ff66;
+  --px-green-dim: #1f9e46;
+  --px-green-dark: #0d3a1c;
+  --px-text: #c8f7d4;
+  --px-border: #33ff66;
+  --px-shadow: 4px 4px 0 #000;
+  --px-font: 'Fusion Pixel', 'Courier New', monospace;
+}
+
+/* ---------- 全局：图片锐利 + 字体基调 ---------- */
+img {
+  image-rendering: pixelated;
+}
+
+body,
+#page-header,
+#nav,
+#pagination,
+#footer,
+#rightside,
+.card-widget,
+.card-info,
+.avatar-img,
+#toggle-sidebar,
+#site-name,
+#site-subtitle,
+.site-data,
+.menu-item a,
+h1, h2, h3, h4, h5, h6,
+.button--primary,
+.post-title,
+.relatedPosts .relatedPosts_headline,
+kbd,
+.tag--list a,
+.pagination .page-number,
+.layout .layout .tag-cloud-list a {
+  font-family: var(--px-font) !important;
+  letter-spacing: .5px;
+}
+
+body {
+  background: var(--px-bg) !important;
+  color: var(--px-text);
+}
+
+/* 正文保持可读，不套像素字体 */
+#article-container p,
+#article-container li {
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+
+/* ---------- CRT 扫描线 overlay ---------- */
+#page-header.full_page::after,
+#page-header:not(.full_page)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, .22) 0px,
+    rgba(0, 0, 0, .22) 1px,
+    transparent 2px,
+    transparent 4px
+  );
+  z-index: 2;
+}
+
+/* 顶部打字机副标题：终端绿 + 光标 */
+#site-info .typed-cursor {
+  color: var(--px-green) !important;
+}
+
+/* ---------- 顶部导航 ---------- */
+#nav {
+  background: rgba(10, 14, 10, .92) !important;
+  box-shadow: 0 3px 0 var(--px-green-dark) !important;
+  backdrop-filter: none;
+}
+#nav .site-page {
+  color: var(--px-text) !important;
+  text-shadow: none !important;
+}
+#nav .site-page:hover {
+  color: var(--px-green) !important;
+  background: var(--px-green-dark);
+}
+#site-name,
+#site-name:hover {
+  color: var(--px-green) !important;
+  text-shadow: 2px 2px 0 #000 !important;
+}
+
+/* ---------- 卡片：直角 + 硬阴影 + 绿边 ---------- */
+.card-widget,
+#aside-content .card-widget,
+.layout > div:first-child,
+#recent-posts > .recent-post-item,
+#pagination,
+#archive .article-sort-item,
+.article-sort-item,
+.tag-cloud-list a,
+#tag .tags .tag--list a,
+#categories .category-lists .category-list a {
+  border-radius: 0 !important;
+  border: 2px solid var(--px-green-dark) !important;
+  box-shadow: var(--px-shadow) !important;
+  background: var(--px-panel) !important;
+}
+
+.card-widget:hover {
+  border-color: var(--px-green) !important;
+}
+
+/* 卡片标题左侧竖条改成 ▶ 块 */
+.item-headline i {
+  color: var(--px-green) !important;
+}
+.item-headline span {
+  color: var(--px-green) !important;
+  text-transform: none;
+}
+
+/* ---------- 文章卡片 ---------- */
+.recent-post-info .article-title {
+  color: var(--px-green) !important;
+  text-shadow: 2px 2px 0 #000;
+}
+.recent-post-info .article-title:hover {
+  text-shadow: 2px 2px 0 var(--px-green-dark);
+}
+.recent-post-info .content,
+#aside-content .card-info .banner-button-group .banner-button-text {
+  color: var(--px-text) !important;
+}
+.recent-post-item .post-meta__date,
+.recent-post-item .post-meta__tags,
+.article-meta {
+  color: var(--px-green-dim) !important;
+}
+
+/* 文章内链绿色下划线 */
+#article-container a {
+  color: var(--px-green) !important;
+  border-bottom: 1px dashed var(--px-green-dim);
+}
+#article-container a:hover {
+  background: var(--px-green-dark);
+}
+
+/* ---------- 代码块：CRT 终端 ---------- */
+#article-container figure.highlight,
+#article-container pre {
+  border-radius: 0 !important;
+  border: 2px solid var(--px-green-dark) !important;
+  box-shadow: var(--px-shadow) !important;
+  background: #050705 !important;
+}
+#article-container figure.highlight table::before,
+.code-img {
+  background: unset;
+}
+#article-container figure.highlight .code pre .line,
+#article-container pre code {
+  font-family: 'Cascadia Code', 'Consolas', monospace !important;
+  font-size: 13px;
+  color: #b9ffcc;
+}
+#article-container figure.highlight .gutter pre .line {
+  color: var(--px-green-dim) !important;
+}
+figure.highlight:hover,
+figure.highlight .copy-btn {
+  border-radius: 0 !important;
+  opacity: 1;
+}
+figure.highlight .copy-btn {
+  border: 1px solid var(--px-green-dim);
+  color: var(--px-green) !important;
+  background: transparent;
+}
+figure.highlight .copy-btn:hover {
+  background: var(--px-green-dark);
+}
+
+/* ---------- 标签 / 分类 / 按钮：8-bit 块 ---------- */
+.tag-contents a,
+.tag--list a,
+.pagination .page-number,
+.button--primary,
+#pagination .pagination > *,
+kbd {
+  border-radius: 0 !important;
+}
+.tag-contents a,
+.tag--list a {
+  border: 1px solid var(--px-green-dim) !important;
+  background: var(--px-panel) !important;
+  color: var(--px-text) !important;
+  box-shadow: 2px 2px 0 #000;
+}
+.tag-contents a:hover,
+.tag--list a:hover {
+  background: var(--px-green-dark) !important;
+  border-color: var(--px-green) !important;
+  color: #fff !important;
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #000;
+}
+
+/* 分页按钮 */
+#pagination .pagination > * {
+  background: var(--px-panel) !important;
+  border: 2px solid var(--px-green-dark) !important;
+  color: var(--px-green) !important;
+  box-shadow: 2px 2px 0 #000;
+}
+#pagination .pagination > *.current,
+#pagination .pagination > *:hover {
+  background: var(--px-green-dark) !important;
+  border-color: var(--px-green) !important;
+  color: #fff !important;
+}
+
+/* ---------- 归档页时间线 ---------- */
+.article-sort-item-info .article-sort-item-title {
+  color: var(--px-green) !important;
+}
+.article-sort-item-time {
+  color: var(--px-green-dim) !important;
+}
+
+/* ---------- TOC 直角化 ---------- */
+#aside-content #toc {
+  background: var(--px-panel) !important;
+  border-radius: 0 !important;
+}
+.toc-link {
+  color: var(--px-text) !important;
+}
+.toc-link.active {
+  color: var(--px-green) !important;
+  border-left: 2px solid var(--px-green) !important;
+}
+
+/* ---------- 右下角功能按钮 ---------- */
+#rightside {
+  bottom: 130px !important;
+}
+#rightside > div > button,
+#rightside > div > a {
+  border-radius: 0 !important;
+  background-color: var(--px-green-dark) !important;
+  border: 1px solid var(--px-green-dim) !important;
+  color: var(--px-green) !important;
+  box-shadow: 2px 2px 0 #000 !important;
+}
+#rightside > div > button:hover,
+#rightside > div > a:hover {
+  background: var(--px-green) !important;
+  color: #000 !important;
+}
+
+/* ---------- 头像像素框 ---------- */
+.avatar-img {
+  border-radius: 0 !important;
+  border: 2px solid var(--px-green) !important;
+  box-shadow: 3px 3px 0 #000 !important;
+}
+.card-info .author-info__name {
+  color: var(--px-green) !important;
+  text-shadow: 2px 2px 0 #000;
+}
+.card-info .author-info__description {
+  color: var(--px-text) !important;
+}
+
+/* ---------- 页脚 ---------- */
+#footer {
+  background: #050705 !important;
+  border-top: 2px solid var(--px-green-dark);
+}
+#footer:before {
+  background: unset !important;
+}
+#footer-wrap,
+#footer-wrap a {
+  color: var(--px-green-dim) !important;
+  text-shadow: none !important;
+}
+#footer-wrap a:hover {
+  color: var(--px-green) !important;
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #050705;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--px-green-dark);
+  border: 1px solid var(--px-green-dim);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--px-green-dim);
+}
+
+/* ---------- 选区颜色 ---------- */
+::selection {
+  background: var(--px-green);
+  color: #000;
+}
+
+/* ---------- 引用块 ---------- */
+#article-container blockquote {
+  border-radius: 0 !important;
+  border: 2px solid var(--px-green-dark) !important;
+  border-left: 5px solid var(--px-green) !important;
+  background: var(--px-green-dark) !important;
+  color: var(--px-text) !important;
+}
+
+/* ---------- 表格 ---------- */
+#article-container table {
+  border-radius: 0 !important;
+  border: 2px solid var(--px-green-dark) !important;
+}
+#article-container table th {
+  background: var(--px-green-dark) !important;
+  color: var(--px-green) !important;
+}
+#article-container table td,
+#article-container table th {
+  border: 1px solid var(--px-green-dark) !important;
+}
+
+/* ---------- 404 / 文章版权卡片 ---------- */
+.post-copyright {
+  background: var(--px-green-dark) !important;
+  border: 2px solid var(--px-green-dark) !important;
+  border-radius: 0 !important;
+}
+.post-copyright .post-copyright-meta {
+  color: var(--px-green) !important;
+}
+
+/* ============================================================
+   KOF 像素桌宠
+   ============================================================ */
+#kof-pet {
+  position: fixed;
+  left: 12px;
+  bottom: 6px;
+  z-index: 9998;
+  user-select: none;
+  --pet-w: 130px;
+}
+#kof-pet .pet-sprite {
+  width: var(--pet-w);
+  cursor: pointer;
+  image-rendering: pixelated;
+  filter: drop-shadow(3px 3px 0 rgba(0,0,0,.55));
+  transition: transform .12s steps(2);
+  display: block;
+}
+#kof-pet .pet-sprite:hover {
+  transform: translateY(-3px);
+}
+#kof-pet .pet-sprite:active {
+  transform: translateY(2px);
+}
+#kof-pet .pet-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-family: var(--px-font);
+  font-size: 12px;
+  color: #000;
+  background: var(--px-green);
+  border: 1px solid #000;
+  box-shadow: 2px 2px 0 #000;
+}
+#kof-pet .pet-bubble {
+  position: absolute;
+  left: calc(var(--pet-w) + 10px);
+  bottom: 90px;
+  max-width: 230px;
+  padding: 6px 10px;
+  font-family: var(--px-font);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--px-green);
+  background: #050705;
+  border: 2px solid var(--px-green);
+  box-shadow: 3px 3px 0 #000;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .15s steps(2), transform .15s steps(2);
+  pointer-events: none;
+}
+#kof-pet .pet-bubble.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+#kof-pet .pet-bubble::after {
+  content: '';
+  position: absolute;
+  left: -8px;
+  bottom: 12px;
+  width: 0; height: 0;
+  border: 6px solid transparent;
+  border-right-color: var(--px-green);
+}
+#kof-pet .pet-switch {
+  position: absolute;
+  left: 4px;
+  top: -26px;
+  font-family: var(--px-font);
+  font-size: 12px;
+  color: var(--px-green);
+  background: #050705;
+  border: 1px solid var(--px-green-dim);
+  padding: 1px 8px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #000;
+}
+#kof-pet .pet-switch:hover {
+  background: var(--px-green-dark);
+}
+@media (max-width: 768px) {
+  #kof-pet { --pet-w: 96px; }
+  #kof-pet .pet-bubble { max-width: 160px; bottom: 70px; }
+}
