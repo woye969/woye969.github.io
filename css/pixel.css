@@ -454,3 +454,69 @@ kbd {
   #kof-pet { --pet-w: 96px; }
   #kof-pet .pet-bubble { max-width: 160px; bottom: 70px; }
 }
+
+/* ============================================================
+   文章点赞按钮
+   ============================================================ */
+#blog-like {
+  margin: 28px 0 8px;
+  text-align: center;
+}
+#blog-like .like-btn {
+  font-family: var(--px-font);
+  font-size: 16px;
+  padding: 8px 26px;
+  color: var(--px-text);
+  background: var(--px-panel);
+  border: 2px solid var(--px-red);
+  border-radius: 0 !important;
+  box-shadow: 3px 3px 0 #000;
+  cursor: pointer;
+  transition: transform .1s steps(2), background .1s;
+}
+#blog-like .like-btn:hover {
+  background: var(--px-green-dark);
+  color: #fff;
+}
+#blog-like .like-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 #000;
+}
+#blog-like .like-btn.liked {
+  color: #fff;
+  background: var(--px-red);
+  border-color: var(--px-red);
+}
+#blog-like .like-heart {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 18px;
+  color: var(--px-red);
+}
+#blog-like .like-btn.liked .like-heart {
+  color: #fff;
+  text-shadow: 1px 1px 0 #7a1414;
+}
+#blog-like .like-count {
+  display: inline-block;
+  min-width: 22px;
+  margin-left: 8px;
+  padding: 0 6px;
+  background: rgba(0,0,0,.35);
+  border: 1px solid currentColor;
+  font-size: 14px;
+}
+#blog-like .like-hint {
+  margin-top: 8px;
+  font-family: var(--px-font);
+  font-size: 12px;
+  color: var(--px-green-dim);
+}
+#blog-like .pop .like-heart {
+  animation: like-pop .3s steps(3);
+}
+@keyframes like-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.6); }
+  100% { transform: scale(1); }
+}
