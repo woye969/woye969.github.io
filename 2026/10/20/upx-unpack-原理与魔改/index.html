@@ -1,0 +1,453 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱 | Ro0t's Blog</title><meta name="author" content="Ro0t"><meta name="copyright" content="Ro0t"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="UPX 是个压缩器，不是加密壳，更不是虚拟机。它把整个程序压成一坨数据，再附上一段会把自己解压出来的代码。程序启动时先跑这段代码，解压完、把导入表填好，再跳回原来的入口。upx -d 能一键还原，是因为它读文件里留下的一张 32 字节的头，不是因为它会把程序跑一遍。 魔改 UPX 的人改的就是这两样东西：要么改那张头，让 upx -d 不认；要么在解压代码前面再塞一层，让磁盘上的数据和运行时看到的">
+<meta property="og:type" content="article">
+<meta property="og:title" content="把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱">
+<meta property="og:url" content="https://woye969.github.io/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/index.html">
+<meta property="og:site_name" content="Ro0t&#39;s Blog">
+<meta property="og:description" content="UPX 是个压缩器，不是加密壳，更不是虚拟机。它把整个程序压成一坨数据，再附上一段会把自己解压出来的代码。程序启动时先跑这段代码，解压完、把导入表填好，再跳回原来的入口。upx -d 能一键还原，是因为它读文件里留下的一张 32 字节的头，不是因为它会把程序跑一遍。 魔改 UPX 的人改的就是这两样东西：要么改那张头，让 upx -d 不认；要么在解压代码前面再塞一层，让磁盘上的数据和运行时看到的">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://woye969.github.io/img/famicom-cover.png">
+<meta property="article:published_time" content="2026-10-19T19:10:00.000Z">
+<meta property="article:modified_time" content="2026-10-19T19:08:39.212Z">
+<meta property="article:author" content="Ro0t">
+<meta property="article:tag" content="UPX">
+<meta property="article:tag" content="脱壳">
+<meta property="article:tag" content="逆向">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://woye969.github.io/img/famicom-cover.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱",
+  "url": "https://woye969.github.io/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/",
+  "image": "https://woye969.github.io/img/famicom-cover.png",
+  "datePublished": "2026-10-19T19:10:00.000Z",
+  "dateModified": "2026-10-19T19:08:39.212Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ro0t",
+      "url": "https://woye969.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon-pixel.png"><link rel="canonical" href="https://woye969.github.io/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          const mediaQueryDark = window.matchMedia('(prefers-color-scheme: dark)')
+          const mediaQueryLight = window.matchMedia('(prefers-color-scheme: light)')
+
+          if (theme === undefined) {
+            if (mediaQueryLight.matches) activateLightMode()
+            else if (mediaQueryDark.matches) activateDarkMode()
+            else {
+              const hour = new Date().getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            mediaQueryDark.addEventListener('change', () => {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else {
+            theme === 'light' ? activateLightMode() : activateDarkMode()
+          }
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/pixel.css?v=mobilefix"><meta name="generator" content="Hexo 8.1.1"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">10</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/famicom-cover.png);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Ro0t's Blog</span></a><a class="nav-page-title" href="/"><span class="site-name">把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-10-19T19:10:00.000Z" title="发表于 2026-10-20 03:10:00">2026-10-20</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-10-19T19:08:39.212Z" title="更新于 2026-10-20 03:08:39">2026-10-20</time></span></div><div class="meta-secondline"></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><p>UPX 是个压缩器，不是加密壳，更不是虚拟机。它把整个程序压成一坨数据，再附上一段会把自己解压出来的代码。程序启动时先跑这段代码，解压完、把导入表填好，再跳回原来的入口。<code>upx -d</code> 能一键还原，是因为它读文件里留下的一张 32 字节的头，不是因为它会把程序跑一遍。</p>
+<p>魔改 UPX 的人改的就是这两样东西：要么改那张头，让 <code>upx -d</code> 不认；要么在解压代码前面再塞一层，让磁盘上的数据和运行时看到的数据不一样。看懂正常的 UPX 长什么样、入口在哪、原入口又在哪，这些改动就都有地方落。</p>
+<p>下面以 win64 的 PE 为例。32 位的骨架一样，寄存器和地址宽度不同。文中的报错是对 UPX 5.0.0 和 5.0.2 做字节级破坏测出来的，两版行为一致。有些旧教程说“三个节名和版本串缺一不可”，那个结论是错的，后面会写到。</p>
+<h2 id="加壳前后，文件里有什么"><a href="#加壳前后，文件里有什么" class="headerlink" title="加壳前后，文件里有什么"></a>加壳前后，文件里有什么</h2><p>一个没加壳的 PE 大致是这样：DOS 头，PE 头，节表，然后 <code>.text</code>、<code>.rdata</code>、<code>.data</code>、<code>.idata</code>、<code>.reloc</code> 这些节。入口点指向 <code>.text</code> 里的某条指令，导入表放在 <code>.idata</code>，告诉加载器该从哪些 DLL 取哪些函数。</p>
+<p>UPX 把这些节（资源节有时除外）压成一块，再重写成三个节。</p>
+<table>
+<thead>
+<tr>
+<th>节</th>
+<th>磁盘上</th>
+<th>内存里</th>
+<th>干什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>UPX0</td>
+<td>没有内容，SizeOfRawData 为 0</td>
+<td>一大片可读写可执行的空页</td>
+<td>解压的目的地。原程序的节会在这里归位</td>
+</tr>
+<tr>
+<td>UPX1</td>
+<td>有内容</td>
+<td>可读写可执行</td>
+<td>版本串、32 字节头、压缩数据、解压代码</td>
+</tr>
+<tr>
+<td>UPX2</td>
+<td>有内容，通常一页</td>
+<td>只读</td>
+<td>壳自己的导入表</td>
+</tr>
+</tbody></table>
+<p>UPX0 和 UPX1 的 PointerToRawData 经常写成同一个文件偏移。这不冲突，因为 UPX0 的长度是 0，加载器不会从磁盘读它。看到“第一节虚拟上很大、文件里是空的，第二节紧跟着、可执行”，就可以怀疑是 UPX，节名已经不重要了。</p>
+<p>有资源的程序会多留一节，常常还叫 <code>.rsrc</code>。不是整整三节，不代表它不是 UPX。</p>
+<p>UPX1 里的排列是固定的。从这节的文件内容开头算：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">+0     版本串，5 字节，形如 &quot;5.02\0&quot;</span><br><span class="line">+5     PackHeader，32 字节，以 &quot;UPX!&quot; 开头</span><br><span class="line">+37    压缩数据，长度记在头里</span><br><span class="line">       对齐填充</span><br><span class="line">       解压代码，也就是壳的入口</span><br><span class="line">       字符串：&quot;KERNEL32.DLL&quot;、&quot;LoadLibraryA&quot;、&quot;GetProcAddress&quot;……</span><br></pre></td></tr></table></figure>
+
+<p>换一个程序，文件偏移全会变。不要背 <code>0x205</code>、<code>0x59C0</code> 这种数。认位置的办法是搜 <code>&quot;UPX!&quot;</code>：它前面 5 字节是版本串，它自己开始的 32 字节是头，头里的压缩长度告诉你数据到哪结束，结束之后就是解压代码。</p>
+<h2 id="先把-PE-里几个词说清"><a href="#先把-PE-里几个词说清" class="headerlink" title="先把 PE 里几个词说清"></a>先把 PE 里几个词说清</h2><p>不把这几个词分开，后面 EP 和 OEP 一定混。</p>
+<p><strong>文件偏移</strong>是字节在磁盘文件里的位置。十六进制编辑器里 <code>Ctrl+G</code> 跳的就是这个，前提是你选的是 hex offset，不是虚拟地址。</p>
+<p><strong>RVA</strong> 是相对于映像基址的偏移。节表里的 VirtualAddress、可选头里的 AddressOfEntryPoint，都是 RVA。</p>
+<p><strong>VA</strong> 是 RVA 加上映像基址。64 位程序基址通常是 <code>0x140000000</code>，开了 ASLR 之后每次加载都变。调试器里看到的地址是 VA。</p>
+<p>三者的换算只在某一节内部成立：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">文件偏移 = 节的 PointerToRawData + (RVA - 节的 VirtualAddress)</span><br><span class="line">VA       = 映像基址 + RVA</span><br></pre></td></tr></table></figure>
+
+<p>第一节 SizeOfRawData 为 0 时，它没有文件偏移。这时候入口如果指向它，说明有人后来往这个空节里塞了东西，并把 PointerToRawData 改掉了。这是魔改，不是正常 UPX。</p>
+<p><strong>EP</strong> 是 AddressOfEntryPoint，可选头里的一个 4 字节 RVA。PE32+ 里它的文件位置是 <code>e_lfanew + 0x28</code>。<code>e_lfanew</code> 在文件 <code>0x3C</code>。普通加壳样本这个值是 <code>0x80</code>，所以 EP 字段在文件 <code>0xA8</code>。这是这套样本的数，不是所有 PE 的数。换一个文件先读 <code>0x3C</code>。</p>
+<p>加载器创建进程之后，会从 EP 指向的那条指令开始执行。加壳之后，这个值被改成解压代码的位置，不再是原程序的 main。</p>
+<p><strong>OEP</strong> 不是 PE 头里的字段。文件里没有一个叫 OEP 的成员。它是原程序自己的入口，也就是没加壳时 AddressOfEntryPoint 的那个 RVA。UPX 把这个地址编进了解压代码末尾的一条跳转里，源码里的标签叫 <code>original_entry</code>，指令是 <code>jmp original_entry</code>。</p>
+<p>所以这两个词的关系是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">没加壳：EP = OEP，进程从原程序入口开始</span><br><span class="line">加壳后：EP = 解压代码</span><br><span class="line">         解压代码做完事，jmp 到 OEP</span><br><span class="line">         此时内存里的原程序已经还原，导入表也填好了</span><br></pre></td></tr></table></figure>
+
+<p>脱壳要找的就是这条 jmp 的目标。静态脱壳不用找它，<code>upx -d</code> 会把原 PE 头连同原来的 EP 一起还原。动态脱壳才需要人去认这条 jmp。</p>
+<p>正常 UPX 的 EP 落在 UPX1 尾部。把 EP 的 RVA 按上面的公式换成文件偏移，那里应该是解压代码的第一条指令。win64 的第一条几乎总是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">53 56 57 55</span><br></pre></td></tr></table></figure>
+
+<p>对应 <code>push rbx</code>、<code>push rsi</code>、<code>push rdi</code>、<code>push rbp</code>。x64 没有 <code>pusha</code>，解压器要用这四个寄存器，所以先保存。紧跟着两条 <code>lea reg, [rip+disp]</code>，一条算出压缩数据的地址，一条算出解压目的地（落在 UPX0 那片地址里）。</p>
+<p>EP 如果不在 UPX1，而在本该为空的 UPX0 开头，文件就被动过了。那里多出来的代码是壳的作者加的，不是 UPX 的。</p>
+<h2 id="32-字节的头"><a href="#32-字节的头" class="headerlink" title="32 字节的头"></a>32 字节的头</h2><p><code>upx -d</code> 的全部能力都在这 32 字节上。源码在 <code>stub/src/include/header.S</code> 和 <code>src/packhead.cpp</code>。win64 用小端。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">+0    4 字节   &quot;UPX!&quot;</span><br><span class="line">+4    1       头格式版本。现在是 13。这不是 &quot;5.02&quot; 那个字符串</span><br><span class="line">+5    1       文件格式。36（0x24）表示 64 位 PE</span><br><span class="line">+6    1       压缩算法</span><br><span class="line">+7    1       压缩级别，不参与选择解码器</span><br><span class="line">+8    4       解压后数据的 adler32</span><br><span class="line">+12   4       压缩数据的 adler32</span><br><span class="line">+16   4       解压后长度</span><br><span class="line">+20   4       压缩数据长度。用它找解压代码从哪开始</span><br><span class="line">+24   4       原文件大小</span><br><span class="line">+28   1       filter，压缩前对 call/jmp 做的变换</span><br><span class="line">+29   1       filter 的参数</span><br><span class="line">+30   1       filter 的另一个参数</span><br><span class="line">+31   1       头自己的校验和</span><br></pre></td></tr></table></figure>
+
+<p>校验和的算法很弱，但必须对上：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">checksum = (从 +4 加到 +30，含这两头) mod 251</span><br></pre></td></tr></table></figure>
+
+<p>magic 那 4 字节不参与，校验和自己也不参与。改了 +4 到 +30 的任何字段而不重算 +31，<code>upx -d</code> 报 <code>header corrupted 3</code>，解压不会开始。</p>
+<p>算法编号就这几个会遇到的：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">2    NRV2B     默认</span><br><span class="line">5    NRV2D</span><br><span class="line">8    NRV2E</span><br><span class="line">14   LZMA      upx --lzma 用这个</span><br></pre></td></tr></table></figure>
+
+<p>15、16、17 在源码里标着还没启用。win64 不会出现大端那一组编号。</p>
+<p>filter 不是加密。压缩之前，UPX 会把相对 call&#x2F;jmp 的位移改写成更好压的形式，filter 字段记下用了哪一种。解压之后必须做逆变换，否则 call 的目标是错的，程序一跑就飞。只把压缩算法解出来、不做这一步，看起来像代码，运行必崩。<code>upx -d</code> 会做这一步。自己写解压器就得自己做。</p>
+<p>格式编号里和 Windows 有关的：9 是 32 位 PE，36 是 64 位 PE，21 是 Windows CE。43 和 44 是 ARM64 的 64 位 PE，源码写明还没实现。头版本现在的样本基本都是 13，<code>upx -d</code> 接受 12 和 13。更老的 UPX 头只有 28 字节甚至更短，字段宽度不一样，别拿这张 32 字节的表去套 2000 年的样本。</p>
+<h2 id="解压代码跑起来之后"><a href="#解压代码跑起来之后" class="headerlink" title="解压代码跑起来之后"></a>解压代码跑起来之后</h2><p>入口处那四条 push 之后，流程是固定的。</p>
+<p>第一步，解压。NRV 或 LZMA 把数据写到 UPX0 的地址范围。写的是内存，不是磁盘上的 UPX1。所以调试器里如果在 UPX1 里找原程序的代码，找不到。</p>
+<p>第二步，unfilter。按头里的 filter 把 call&#x2F;jmp 变回来。</p>
+<p>第三步，核对解压结果的 adler32。对不上就退出，不会跳到原入口。</p>
+<p>第四步，重建导入表。这一步最值得看懂，因为动态脱壳最后修 IAT 就是在补它。</p>
+<p>压缩数据里保存着原程序的导入信息。解压代码对每个 DLL 做一次 <code>LoadLibraryA</code>，对每个函数做一次 <code>GetProcAddress</code>，把返回的地址写进 IAT。源码里这段叫 <code>PEIMPORT</code>：先读 DLL 名，<code>call [rip+LoadLibraryA]</code>，再逐个函数 <code>call [rip+GetProcAddress]</code>，<code>mov [rbx], rax</code> 把地址填进去。某个函数没找到就走 <code>ExitProcess</code> 退出。</p>
+<p>所以加壳之后，文件自己的导入表只需要这几个：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">KERNEL32.DLL</span><br><span class="line">    LoadLibraryA       按名字加载原程序用到的 DLL</span><br><span class="line">    GetProcAddress     按名字或序号取出函数地址</span><br><span class="line">    VirtualProtect     解压时把页改成可写，做完再改回去</span><br><span class="line">    ExitProcess        失败时退出</span><br><span class="line"></span><br><span class="line">msvcrt.dll</span><br><span class="line">    exit               MinGW 编出来的程序才有。MSVC 的不一定有</span><br></pre></td></tr></table></figure>
+
+<p>导入表瘦成这样，是比节名更硬的指纹。节名改起来是改 8 个字节。导入表要改，就得改解压代码。</p>
+<p>第五步，<code>VirtualProtect</code>。解压过程中 UPX0、UPX1 是可写的。这一步把节属性改回原来的只读、可执行、可读写。源码里甚至会直接改内存中节表的标志位，把可写位清掉。所以在跳到 OEP 之前 dump，节属性可能还是可读写可执行，这不代表原程序本来这样。</p>
+<p>第六步，重定位。UPX 的解压代码用 RIP 相对寻址，自己不怕 ASLR。原程序里的绝对地址需要按实际加载基址修正，这段在 <code>PERELOC1</code>。</p>
+<p>第七步，TLS。如果原程序有 TLS 回调，UPX 会把回调换成自己的，等解压完成再去调原来的回调。标签是 <code>PETLSC</code> 和 <code>PETLSC2</code>。这一点和脱壳有关：TLS 回调比 EP 更早执行。作者要是把检查塞进 TLS，你在入口下断已经晚了。正常 UPX 自己也会占 TLS 回调的位置，所以有 TLS 不一定是魔改，要看回调指向哪。</p>
+<p>最后，恢复寄存器，<code>jmp original_entry</code>。这条 jmp 的目标就是 OEP。</p>
+<h2 id="upx-d-到底查什么"><a href="#upx-d-到底查什么" class="headerlink" title="upx -d 到底查什么"></a><code>upx -d</code> 到底查什么</h2><p>它不运行解压代码，也不比对入口处的机器码。它在文件里找 <code>&quot;UPX!&quot;</code>，读那 32 字节，校验和过了就按 method 解压，再做 unfilter，写出原来的 PE。</p>
+<p>我对一份正常的 win64 加壳文件逐项改一个地方，5.0.0 和 5.0.2 的结果一样。</p>
+<table>
+<thead>
+<tr>
+<th>改动</th>
+<th><code>upx -d</code> 的反应</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>不改</td>
+<td>解开</td>
+</tr>
+<tr>
+<td><code>&quot;UPX!&quot;</code> 改 1 个字节</td>
+<td><code>file is possibly modified/hacked/protected</code>，加 <code>--force</code> 也没用</td>
+</tr>
+<tr>
+<td>只改第一节的名字</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>只改第二节或第三节的名字</td>
+<td>照样解开</td>
+</tr>
+<tr>
+<td>版本串 <code>&quot;5.02&quot;</code> 改掉</td>
+<td>照样解开</td>
+</tr>
+<tr>
+<td><code>&quot;UPX!&quot;</code> 和第一节名字都改回去，版本串和其他节名保持乱的</td>
+<td>解开</td>
+</tr>
+<tr>
+<td>算法编号改了，校验和没重算</td>
+<td><code>header corrupted 3</code></td>
+</tr>
+<tr>
+<td>算法编号改了，校验和重算了，但数据和算法不符</td>
+<td><code>compressed data violation</code></td>
+</tr>
+<tr>
+<td>压缩数据改 1 个字节，头不动</td>
+<td><code>checksum error</code></td>
+</tr>
+<tr>
+<td>入口 RVA 改到别处</td>
+<td><code>not packed by UPX</code></td>
+</tr>
+<tr>
+<td>解压代码第一条指令改成 NOP</td>
+<td>照样解开</td>
+</tr>
+</tbody></table>
+<p>这张表可以直接当分类器。</p>
+<p>报 <code>modified/hacked/protected</code>，只看两处：<code>&quot;UPX!&quot;</code> 还在不在，第一节名字是不是 <code>UPX</code> 开头。版本串、第二第三节名，这两个版本都不检查。旧教程说三处缺一不可，那是猜的。</p>
+<p>报 <code>not packed by UPX</code>，它没在期望的位置找到头，或者入口不在它认为的解压代码上。先看 EP 落在哪一节。落在空节里，几乎一定是前面被加了一段代码。</p>
+<p>报 <code>header corrupted</code>，32 字节自己的校验和没过。先算，再决定哪个字段被改了。</p>
+<p>报 <code>checksum error</code>，头是自洽的，压缩数据和头里的 adler 对不上。数据被 XOR、被截断、被替换，都走这里。</p>
+<p>报 <code>compressed data violation</code>，校验和过了，但指定的算法吃不下这段数据。算法编号是假的，或者长度字段是假的。</p>
+<p>解出来的文件比头里记的原文件大，多出来的是 overlay。UPX 把最后一节结束之后的字节原样附在输出后面。有人把额外代码追加在文件尾时就会这样。overlay 不影响原程序运行。</p>
+<p>还有一件事这张表说明了：解压代码被改、被加密、前面被塞了别的代码，只要头和压缩数据是真的，<code>upx -d</code> 就能还原原程序。这也是为什么能静态还原时就不要去调试器里 dump。</p>
+<h2 id="魔改实际在改什么"><a href="#魔改实际在改什么" class="headerlink" title="魔改实际在改什么"></a>魔改实际在改什么</h2><p>见到一个没见过的样本，先别改字节。看四样东西：节的形状还在不在，导入表是不是只剩那几个函数，<code>upx -d</code> 报哪一句，EP 落在哪、那里的指令是不是 <code>53 56 57 55</code>。然后它就归到下面四类里的某一类，或者几类叠在一起。</p>
+<h3 id="改指纹"><a href="#改指纹" class="headerlink" title="改指纹"></a>改指纹</h3><p>这一类不碰压缩数据。程序照常跑，因为解压代码不靠节名和 <code>&quot;UPX!&quot;</code> 活着。<code>upx -d</code> 靠它们活着。</p>
+<p>最常见的是把 <code>UPX!</code> 改成 <code>UPY!</code>，一个字节。搜 <code>UPY!</code>、<code>UPZ!</code>，或者到版本串后面 5 字节去看。改回 <code>55 50 58 21</code>。校验和不算 magic，不用重算。</p>
+<p>只改第一节名字就够让 <code>upx -d</code> 失败。把那 8 字节改回 <code>UPX0</code>，后面补 0。节的 VirtualSize、PointerToRawData 不要动。</p>
+<p>第二、第三节名和版本串，改了能躲过只扫字符串的工具，躲不过 5.0.x 的 <code>upx -d</code>。要文件干净就改回去，不改也能解。</p>
+<p>这一类的判断标准很简单：把 <code>&quot;UPX!&quot;</code> 和第一节名字修好再跑一次。解开了，后面没有别的层。没解开，看新的报错，进入下面某一类。</p>
+<h3 id="在入口前面加一层"><a href="#在入口前面加一层" class="headerlink" title="在入口前面加一层"></a>在入口前面加一层</h3><p>这一类让磁盘上的压缩流和运行时解压代码读到的不一样。<code>upx -d</code> 读磁盘，所以失败。进程启动时，EP 指向的一小段代码先把数据变回去，再跳进真正的解压代码。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">正常：EP → 解压代码 → 解压 → jmp OEP</span><br><span class="line">魔改：EP → 加出来的代码 → 解压代码 → 解压 → jmp OEP</span><br></pre></td></tr></table></figure>
+
+<p>这段代码几乎总是塞在 UPX0。UPX0 本来没文件内容，把 PointerToRawData 指到文件尾新加的数据，SizeOfRawData 设成对齐后的长度，加载器就会把它映射到那个节的 RVA。EP 再改过去。文件比正常加壳结果大出来的那一截，就是这段代码。</p>
+<p>它要能跑，得满足两个条件，否则作者自己的程序也跑不起来：</p>
+<p>位置无关。用 <code>lea reg, [rip+disp]</code>，不要写绝对地址。开了 ASLR，绝对地址一定指飞。</p>
+<p>不破坏解压代码要的寄存器。解压器要 rbx、rsi、rdi、rbp，入口时也依赖进程刚创建时的现场。额外代码用 r10、r11 这种寄存器做循环，是常见的写法。用了 rax 又没保存，程序会在解压阶段崩，看起来像壳坏了，其实是这段代码把现场毁了。</p>
+<p>还原不需要把这段代码跑一遍。它是数据变换的说明书。</p>
+<p>反汇编 EP 指向的地方。找出三件事：算法、密钥、范围。算法大多是 XOR，偶尔是加、减、取反。范围从两条 <code>lea reg, [rip+disp32]</code> 算，目标地址等于下一条指令的地址加上 disp32。一条是起点，一条是终点。循环体是 <code>xor byte</code> 还是 <code>xor dword</code>，步进是 1 还是 4，决定你在文件上怎么做逆操作。</p>
+<p>RVA 换回文件偏移，用前面的公式。范围经常从压缩数据的第一个字节开始，一直盖到解压代码的入口，中间的对齐字节也算在内。对齐字节漏了，解压代码对不齐，接下来报 checksum error。</p>
+<p>XOR 的逆还是 XOR。加法的逆是减法。做完把 EP 改回这段代码最后跳去的地址，那就是真的解压代码。如果指纹也被抹了，按上一类改回去，再跑 <code>upx -d</code>。</p>
+<p>密钥不一定是立即数。有的用几条算术算出来，在纸上算完还是一个字节。有的不是异或整段，只异或头，或者按 4 字节滚动。有的第一段代码先解密第二段，第二段再解密数据，要从 EP 顺着跳转读完，不能只读第一段。</p>
+<p>循环里如果出现两个内存字节交换、下标对 256 取模，那是 RC4 一类。用 Python 把那段循环重放一遍，对文件做同样的操作。不必开调试器。</p>
+<p>EP 被改到第一节之后，<code>upx -d</code> 的第一句是 <code>not packed</code>。它还没看压缩数据。所以这句报错不代表“不是 UPX”，只代表入口不在它期望的地方。</p>
+<h3 id="改头"><a href="#改头" class="headerlink" title="改头"></a>改头</h3><p>头里每个字段都是给解码器用的。改法有两种，报错不同。</p>
+<p>不重算校验和。最后一字节还是旧值，报 <code>header corrupted 3</code>。这是最好修的一种：字段改回去，旧的校验和自己就对上了。不知道原值就枚举。算法编号只有 2、5、8、14 值得试，每填一次就重算校验和。哪个不再报 header corrupted，留哪个。</p>
+<p>重算了校验和，但字段是假的。<code>upx -d</code> 会真的用假算法去解，然后报 <code>compressed data violation</code>。这时不要再动校验和，改字段。</p>
+<p>filter 被改了比较讨厌。解压能完成，逆变换用了错的参数，生成的程序一运行就崩。对 filter 那一个字节做同样的枚举，哪个解出来能跑哪个就是。</p>
+<p>长度字段被改，不能拿 32 位整数去枚举。压缩长度可以从位置推：数据从 <code>&quot;UPX!&quot;</code> 之后 32 字节开始，到解压代码之前结束。解压代码的文件偏移用 EP 换算。如果 EP 已经被改去跑额外代码，就用那段代码最后跳向的地址。</p>
+<p>adler 字段被改、校验和也配平了，解码能走完，最后报 checksum error。这种少见。先把算法编号枚举完，再考虑它。</p>
+<h3 id="动解压代码，专门对付调试器"><a href="#动解压代码，专门对付调试器" class="headerlink" title="动解压代码，专门对付调试器"></a>动解压代码，专门对付调试器</h3><p><code>upx -d</code> 看不见这一层，因为它不运行代码。只要前面三层能还原，反调试不用管。它只在你选择“跑起来再 dump”时才存在。</p>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>实际效果</th>
+<th>动态时怎么处理</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>mov reg, gs:[0x60]</code>，再读 <code>+2</code></td>
+<td>读 PEB 的 BeingDebugged。高明的写法不是崩，而是换一把错的密钥去解密，然后死在解压器里面，看起来像数据坏了</td>
+<td>把读 BeingDebugged 的那条指令改成 <code>xor reg, reg</code>，让它以为没有调试器</td>
+</tr>
+<tr>
+<td>导入表里多了 <code>IsDebuggerPresent</code> 或 <code>CheckRemoteDebuggerPresent</code></td>
+<td>同上，只是走 API</td>
+<td>在返回时把 eax 改成 0</td>
+</tr>
+<tr>
+<td><code>NtQueryInformationProcess</code>，查 ProcessDebugPort（7）或 ProcessDebugObjectHandle（30）</td>
+<td>比 PEB 那个标志难被插件一键清掉</td>
+<td>同样让它返回“没有调试器”。静态还原仍然优先</td>
+</tr>
+<tr>
+<td><code>rdtsc</code> 前后相减</td>
+<td>单步太慢就走错密钥或死循环</td>
+<td>不要单步过解密循环。在循环结束的地方下断点，让它自己跑完</td>
+</tr>
+<tr>
+<td>入口附近搜 <code>0xCC</code></td>
+<td>软件断点会被发现</td>
+<td>用硬件断点，或者先静态还原</td>
+</tr>
+<tr>
+<td>检查放在 TLS 回调里</td>
+<td>比 EP 更早。你在入口下断，检查已经跑完</td>
+<td>先看 TLS 目录指向哪。静态还原不受影响</td>
+</tr>
+<tr>
+<td>解压之后把内存里的 PE 头抹掉</td>
+<td>OEP 处 dump 出来没有头，或者头是假的</td>
+<td>在抹掉之前断下，或者 dump 之后把头补回去</td>
+</tr>
+<tr>
+<td>原入口的前几条指令被搬到解压代码里执行，再跳到 OEP 后面</td>
+<td>dump 出来的入口缺了几条指令</td>
+<td>把那几条补回去，入口填原来的 OEP，不是跳转目标</td>
+</tr>
+<tr>
+<td>IAT 里不填真实地址，填一个跳板</td>
+<td>Scylla 认出来的是跳板，不是 API</td>
+<td>再跟一层跳板。能 <code>upx -d</code> 就不要走这条路</td>
+</tr>
+</tbody></table>
+<p>反调试很少单独出现。它总是和“入口前面加一层”叠在一起：先检查，再解密。静态把解密逆了，检查就变成不会执行的代码。</p>
+<h2 id="动态脱壳的几种走法"><a href="#动态脱壳的几种走法" class="headerlink" title="动态脱壳的几种走法"></a>动态脱壳的几种走法</h2><p>静态能解开就不要看这一节。下面是静态走不通时才用的，比如解码器被整个换掉，或者密钥要运行到一半才拼出来。</p>
+<p>不管哪一种，先确认反调试不会在中途把密钥换掉或把进程杀掉。否则你等来的不是 OEP，是一次访问违例。</p>
+<h3 id="单步跟到那条-jmp"><a href="#单步跟到那条-jmp" class="headerlink" title="单步跟到那条 jmp"></a>单步跟到那条 jmp</h3><p>x64dbg 加载，从 EP 开始。正常 UPX 的解压循环很长，不要一条一条步过去。在循环后面、导入重建后面下断点，或者直接对 <code>jmp</code> 这种转移下断。</p>
+<p>win64 的 UPX 离开解压代码时是一条 <code>jmp</code>，目标在另一个节里，通常落进 UPX0 的地址范围。那就是 OEP。目标如果还在 UPX1 里跳来跳去，还没到。</p>
+<p>这条路最直观，也最容易被反调试和时间检测打断。</p>
+<h3 id="对解压目的地下内存断点"><a href="#对解压目的地下内存断点" class="headerlink" title="对解压目的地下内存断点"></a>对解压目的地下内存断点</h3><p>UPX0 的 VirtualAddress 就是解压目的地的起点。对那一页下内存写入断点，会在解压过程中反复断下，烦。等写入停了，再对同一区域下内存执行断点。解压代码跳到 OEP 时，会第一次从那片内存取指令，断点就断在 OEP。</p>
+<p>这个办法不依赖你认不认 <code>jmp</code> 的机器码。解压代码被花指令搅过、不好跟的时候用它。</p>
+<h3 id="ESP-定律"><a href="#ESP-定律" class="headerlink" title="ESP 定律"></a>ESP 定律</h3><p>进入 EP 时看栈顶，给那个地址下硬件访问断点。UPX 的解压代码开头 push 了四个寄存器，做完之后会 pop 回来，栈回到进入时的位置，然后才 jmp 到 OEP。硬件断点在 pop 完、即将离开的时候断下。再走几步就是那条 jmp。</p>
+<p>这个办法对“开头保存寄存器、结尾恢复”的壳都有效，不限于 UPX。作者要是在中间改了栈，或者用了别的方式保存现场，就会失效。</p>
+<h3 id="等一个只有原程序才会调用的-API"><a href="#等一个只有原程序才会调用的-API" class="headerlink" title="等一个只有原程序才会调用的 API"></a>等一个只有原程序才会调用的 API</h3><p>原程序迟早要调用它自己的函数，比如这套练习里的 <code>fgets</code> 和 <code>puts</code>，一般程序里的 <code>GetCommandLineW</code>、<code>MessageBoxA</code>。在那个 API 上下断。断下时看返回地址，返回地址在 UPX0 的范围内，调用点附近就是原程序的代码。沿着调用栈往回找，能找到 OEP，但不一定正好断在 OEP 上。</p>
+<p>这个办法适合解压代码搅得很乱、jmp 不好认的情况。它找到的是“原程序已经在跑了”，还要再往前收一点才能得到真正的入口。</p>
+<h3 id="用工具在-OEP-处-dump"><a href="#用工具在-OEP-处-dump" class="headerlink" title="用工具在 OEP 处 dump"></a>用工具在 OEP 处 dump</h3><p>到了 OEP，内存里原程序的节已经在 UPX0 那片地址上，IAT 里也已经是真实的函数地址。这时候 dump 才有意义。早了，dump 出来的是没解压的数据，或者 IAT 还是空的。</p>
+<p>Scylla 挂在 x64dbg 里做这件事：对进程做 dump，再 IAT 搜索、Get Imports、Fix dump。修 IAT 能成功的前提是 IAT 里已经是 <code>GetProcAddress</code> 返回的那种地址。解压代码正常跑完就是这样。中间隔了跳板，Scylla 会把跳板当成 API，修出来的文件一运行就错。</p>
+<p>pe-sieve 可以在进程外面扫被改过的页，适合解压代码会把 PE 头抹掉、Scylla 找不到模块的时候。它不是第一步该用的工具。</p>
+<p>dump 出来的文件还要改入口。dump 工具有时把入口留成壳的 EP。可选头里的 AddressOfEntryPoint 要改成 OEP 的 RVA，不是调试器里看到的 VA。RVA &#x3D; VA - 这次加载的实际基址。实际基址看模块列表，不要用 <code>0x140000000</code> 去减，ASLR 开着时那个数是错的。</p>
+<h3 id="这几种办法怎么选"><a href="#这几种办法怎么选" class="headerlink" title="这几种办法怎么选"></a>这几种办法怎么选</h3><p>入口处就是正常的 <code>53 56 57 55</code>，只是 <code>upx -d</code> 因为头被改了而不干活：不要动态。把头修好，或者自己按头里的长度解压。</p>
+<p>入口处是一段解密，解密之后才是 <code>53 56 57 55</code>：优先在文件上做逆变换。逆变换需要的密钥要运行起来才有，再考虑动态。动态时在解密循环结束处下断，不要单步。</p>
+<p>解压代码已经不是 UPX 的了：ESP 定律和内存执行断点仍然能用，因为它们不依赖 UPX 的指令。API 断点是兜底。</p>
+<h2 id="一套具体的例子"><a href="#一套具体的例子" class="headerlink" title="一套具体的例子"></a>一套具体的例子</h2><p>这六个文件是同一个 MinGW x64 程序，只是切口不同。口令是 <code>unp4ck_uR_f1rst</code>，对了就打印 <code>flag{upx_1s_a_g00d_f1rst_sh3ll}</code>。下面的文件偏移只对这套样本有效。方法是前面几节的，不是另一套。</p>
+<p>样本的 <code>e_lfanew</code> 是 <code>0x80</code>，所以 EP 字段在文件 <code>0xA8</code>。正常时这 4 字节是 <code>C0 A7 01 00</code>，RVA <code>0x1A7C0</code>。它落在 UPX1，节内偏移 <code>0x57C0</code>，文件偏移 <code>0x59C0</code>。那里是 <code>53 56 57 55</code>。<code>&quot;UPX!&quot;</code> 在文件 <code>0x205</code>。第一节名字在 <code>0x188</code>。</p>
+<p>第一题没改。<code>upx -d</code> 直接得到 88348 字节的原程序。</p>
+<p>第二题把 <code>0x207</code> 从 <code>58</code> 改成 <code>59</code>，<code>UPX!</code> 变成 <code>UPY!</code>。报 modified。改回这个字节就行。</p>
+<p>第三题把第一节改名 <code>.tdata</code>，第二、第三节改成 <code>.tcode</code>、<code>.timp</code>，版本串改成 <code>1.00</code>，magic 改成 <code>PK!@</code>。实测只需要把第一节改回 <code>UPX0</code>、magic 改回 <code>UPX!</code>。版本串和另外两个节名可以不动。</p>
+<p>第四题 magic 和节名都在，报的是 not packed。EP 被改成 <code>00 10 00 00</code>，也就是 RVA <code>0x1000</code>，指向 UPX0。UPX0 的文件内容在 <code>0xEE00</code>，是这段：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">mov  r9d, 0x66</span><br><span class="line">lea  r10, [rip+...]      ; RVA 0x15025，文件 0x225</span><br><span class="line">lea  r11, [rip+...]      ; RVA 0x1A7C0，文件 0x59C0</span><br><span class="line">xor  byte ptr [r10], r9b</span><br><span class="line">inc  r10</span><br><span class="line">cmp  r10, r11</span><br><span class="line">jb   循环</span><br><span class="line">jmp  r11                 ; 跳回真正的解压代码</span><br></pre></td></tr></table></figure>
+
+<p>逆操作是把 <code>[0x225, 0x59C0)</code> 每个字节异或 <code>0x66</code>，再把 <code>0xA8</code> 改回 <code>C0 A7 01 00</code>。异或完，<code>0x225</code> 应该是 <code>F6 FF 6E FF</code>。范围如果停在 <code>0x59BD</code>，会漏掉最后 3 个字节，接下来报 checksum error。UPX0 的 PointerToRawData 不用改回去，多出来的代码会变成 overlay，解出来比原文件大 740 字节，能跑。</p>
+<p>第五题的压缩数据和第四题一样。额外代码开头多了几条：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">mov  r9, gs:[0x60]</span><br><span class="line">movzx r9d, byte ptr [r9+2]</span><br><span class="line">test r9b, r9b</span><br><span class="line">je   用 0x66</span><br><span class="line">mov  r9d, 0x99</span><br><span class="line">jmp  解密循环</span><br></pre></td></tr></table></figure>
+
+<p>挂着调试器就用 <code>0x99</code> 去解，解压器吃到垃圾然后崩，没有弹窗。静态还原用 <code>0x66</code>。<code>0x99</code> 是给调试器准备的。节名被改成 <code>.data0</code>、<code>.code0</code>、<code>.imp0</code>，版本串改成 <code>9.99</code>，magic 改成 <code>G00D</code>。第一节名字和 magic 改回去，入口改回去，异或逆掉，<code>upx -d</code> 就能解开。反调试没有执行到。</p>
+<p>第六题是一次真正的 LZMA 压缩，算法编号应该是 14，被改成了 2，校验和没有重算。报 header corrupted。把算法那一个字节改回 <code>0x0E</code>，校验和自己对上。入口 RVA 是 <code>0x1A190</code> 而不是 <code>0x1A7C0</code>，因为 LZMA 的解压代码长度不同。不要把入口改成第一题的值。</p>
+<h2 id="什么时候不要硬套-upx-d"><a href="#什么时候不要硬套-upx-d" class="headerlink" title="什么时候不要硬套 upx -d"></a>什么时候不要硬套 <code>upx -d</code></h2><p>骨架还在，但下面任何一条成立，就别再枚举算法编号了。</p>
+<p>解压代码的开头不是那四条 push 加 RIP 相对寻址，入口也确实在这节里，前面没有额外代码。解码器已经被换掉了。用 ESP 定律或内存执行断点去等 OEP。</p>
+<p>额外代码里出现 AES 指令，或者一大段和输入无关的查表，密钥不在文件里，要运行起来才拼得出来。静态逆变换的前提是密钥算得出来。算不出来就让程序自己解，然后 dump。</p>
+<p>套了两层，外层不是 UPX。外层解开之前，不要在内层的 <code>&quot;UPX!&quot;</code> 上改字节。先处理入口处真正在跑的那段。</p>
+<p>导入表是空的，或者 IAT 指向解压代码内部。先试 <code>upx -d</code>，它经常仍能解开。只有它失败才 dump，并且 dump 之后要自己跟跳板。</p>
+<h2 id="收个尾"><a href="#收个尾" class="headerlink" title="收个尾"></a>收个尾</h2><p>UPX 把原程序压成数据。启动时解压代码把数据还原到空节里，用 <code>LoadLibraryA</code> 和 <code>GetProcAddress</code> 填导入表，用 <code>VirtualProtect</code> 把页属性改回去，然后 <code>jmp</code> 到原来的入口。文件里的 EP 指向解压代码。原来的入口不在 PE 头里，在这条 jmp 的目标上。</p>
+<p><code>upx -d</code> 不跑这段代码。它读 <code>&quot;UPX!&quot;</code> 开头的 32 字节。校验和是中间 27 个字节相加，对 251 取余。它真正卡住的指纹只有两处：magic，以及第一节名字以 <code>UPX</code> 开头。</p>
+<p>魔改改指纹，就改回去。在入口前加解密，就把那段代码当说明书，在文件上做逆操作，再把 EP 指回解压代码。改头，就枚举算法编号并重算校验和。改解压代码来反调试，静态还原碰不到；非要动态，先把检查拆掉，再用 jmp、内存断点或栈平衡找到原来的入口，最后 dump。</p>
+<p>能让 <code>upx -d</code> 解开的，就不要 dump。</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://woye969.github.io">Ro0t</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://woye969.github.io/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/">https://woye969.github.io/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://woye969.github.io" target="_blank">Ro0t's Blog</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E9%80%86%E5%90%91/">逆向</a><a class="post-meta__tags" href="/tags/UPX/">UPX</a><a class="post-meta__tags" href="/tags/%E8%84%B1%E5%A3%B3/">脱壳</a></div><div class="post-share"><div class="social-share" data-image="/img/famicom-cover.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/10/19/ollvm-deobfuscation-Oo0l1IVvMm/" title="从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生"><img class="cover" src="/img/famicom-cover.png" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生</div></div><div class="info-2"><div class="info-item-1">引子事情是从一道 CTF 题开始的。拿到一个 stripped 的 ELF，定位到 main，熟练地按下 F5，然后 Hex-Rays 给我看了这么一个东西： 12345678910__int64 __fastcall main(int a1, char **a2, char **a3)&#123;  ...  s = s_;  memset(s_, 0, 0x4150u);  p_n372483 = &amp;n372483; ...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/" title="某招聘软件 13.160 版本协议逆向分析"><img class="cover" src="/img/famicom-cover.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-10-17</div><div class="info-item-2">某招聘软件 13.160 版本协议逆向分析</div></div><div class="info-2"><div class="info-item-1"> 仅供学习交流与技术研讨，请勿用于任何未授权用途。文中敏感信息（手机号、令牌、设备指纹、密钥中段）均已脱敏；App 名称、包名、类名、域名均已化名。请遵守《网络安全法》及相关服务条款。  前言第一次逆向国内的app，只敢逆个登录学习一下，如果app的开发者觉得有侵权请联系作者删除 目标是某主流求职 App（下称 TApp）。本文是Ro0t对其 Android 端 13.160 版本通信协议的完整逆向过程：从拆包、定位签名链路、啃 ...</div></div></div></a><a class="pagination-related" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray"><img class="cover" src="/img/famicom-cover.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-10-16</div><div class="info-item-2">NepCTF2026 ColorfulArray</div></div><div class="info-2"><div class="info-item-1">好久没看CTF了，都快忘记我的CTF逆向了啊，最近刷了一下nepctf2026的题目，感觉题目出的非常有新意，也可以说是不像给人写的，有感觉吗？ 初探exe题目描述： 12345678910111213Hello Am I working right today?It seems you&#x27;ve been awayI&#x27;ve been waiting hereI&#x27;ve thought of somethi...</div></div></div></a><a class="pagination-related" href="/2026/10/19/ollvm-deobfuscation-Oo0l1IVvMm/" title="从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生"><img class="cover" src="/img/famicom-cover.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-10-19</div><div class="info-item-2">从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生</div></div><div class="info-2"><div class="info-item-1">引子事情是从一道 CTF 题开始的。拿到一个 stripped 的 ELF，定位到 main，熟练地按下 F5，然后 Hex-Rays 给我看了这么一个东西： 12345678910__int64 __fastcall main(int a1, char **a2, char **a3)&#123;  ...  s = s_;  memset(s_, 0, 0x4150u);  p_n372483 = &amp;n372483; ...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Ro0t</div><div class="author-info-description">专注二进制安全、逆向分析与漏洞利用</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">10</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/woye969" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">这是Ro0t的博客，尽量会给师傅们更新一些有趣的网安知识，不定时更新。喜欢我的blog的点点赞❤</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8A%A0%E5%A3%B3%E5%89%8D%E5%90%8E%EF%BC%8C%E6%96%87%E4%BB%B6%E9%87%8C%E6%9C%89%E4%BB%80%E4%B9%88"><span class="toc-number">1.</span> <span class="toc-text">加壳前后，文件里有什么</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%88%E6%8A%8A-PE-%E9%87%8C%E5%87%A0%E4%B8%AA%E8%AF%8D%E8%AF%B4%E6%B8%85"><span class="toc-number">2.</span> <span class="toc-text">先把 PE 里几个词说清</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#32-%E5%AD%97%E8%8A%82%E7%9A%84%E5%A4%B4"><span class="toc-number">3.</span> <span class="toc-text">32 字节的头</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%A7%A3%E5%8E%8B%E4%BB%A3%E7%A0%81%E8%B7%91%E8%B5%B7%E6%9D%A5%E4%B9%8B%E5%90%8E"><span class="toc-number">4.</span> <span class="toc-text">解压代码跑起来之后</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#upx-d-%E5%88%B0%E5%BA%95%E6%9F%A5%E4%BB%80%E4%B9%88"><span class="toc-number">5.</span> <span class="toc-text">upx -d 到底查什么</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%AD%94%E6%94%B9%E5%AE%9E%E9%99%85%E5%9C%A8%E6%94%B9%E4%BB%80%E4%B9%88"><span class="toc-number">6.</span> <span class="toc-text">魔改实际在改什么</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%94%B9%E6%8C%87%E7%BA%B9"><span class="toc-number">6.1.</span> <span class="toc-text">改指纹</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9C%A8%E5%85%A5%E5%8F%A3%E5%89%8D%E9%9D%A2%E5%8A%A0%E4%B8%80%E5%B1%82"><span class="toc-number">6.2.</span> <span class="toc-text">在入口前面加一层</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%94%B9%E5%A4%B4"><span class="toc-number">6.3.</span> <span class="toc-text">改头</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8A%A8%E8%A7%A3%E5%8E%8B%E4%BB%A3%E7%A0%81%EF%BC%8C%E4%B8%93%E9%97%A8%E5%AF%B9%E4%BB%98%E8%B0%83%E8%AF%95%E5%99%A8"><span class="toc-number">6.4.</span> <span class="toc-text">动解压代码，专门对付调试器</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8A%A8%E6%80%81%E8%84%B1%E5%A3%B3%E7%9A%84%E5%87%A0%E7%A7%8D%E8%B5%B0%E6%B3%95"><span class="toc-number">7.</span> <span class="toc-text">动态脱壳的几种走法</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8D%95%E6%AD%A5%E8%B7%9F%E5%88%B0%E9%82%A3%E6%9D%A1-jmp"><span class="toc-number">7.1.</span> <span class="toc-text">单步跟到那条 jmp</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AF%B9%E8%A7%A3%E5%8E%8B%E7%9B%AE%E7%9A%84%E5%9C%B0%E4%B8%8B%E5%86%85%E5%AD%98%E6%96%AD%E7%82%B9"><span class="toc-number">7.2.</span> <span class="toc-text">对解压目的地下内存断点</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#ESP-%E5%AE%9A%E5%BE%8B"><span class="toc-number">7.3.</span> <span class="toc-text">ESP 定律</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%AD%89%E4%B8%80%E4%B8%AA%E5%8F%AA%E6%9C%89%E5%8E%9F%E7%A8%8B%E5%BA%8F%E6%89%8D%E4%BC%9A%E8%B0%83%E7%94%A8%E7%9A%84-API"><span class="toc-number">7.4.</span> <span class="toc-text">等一个只有原程序才会调用的 API</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%94%A8%E5%B7%A5%E5%85%B7%E5%9C%A8-OEP-%E5%A4%84-dump"><span class="toc-number">7.5.</span> <span class="toc-text">用工具在 OEP 处 dump</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%BF%99%E5%87%A0%E7%A7%8D%E5%8A%9E%E6%B3%95%E6%80%8E%E4%B9%88%E9%80%89"><span class="toc-number">7.6.</span> <span class="toc-text">这几种办法怎么选</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E5%A5%97%E5%85%B7%E4%BD%93%E7%9A%84%E4%BE%8B%E5%AD%90"><span class="toc-number">8.</span> <span class="toc-text">一套具体的例子</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E4%B8%8D%E8%A6%81%E7%A1%AC%E5%A5%97-upx-d"><span class="toc-number">9.</span> <span class="toc-text">什么时候不要硬套 upx -d</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%94%B6%E4%B8%AA%E5%B0%BE"><span class="toc-number">10.</span> <span class="toc-text">收个尾</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/" title="把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱"/></a><div class="content"><a class="title" href="/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/" title="把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱">把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱</a><time datetime="2026-10-19T19:10:00.000Z" title="发表于 2026-10-20 03:10:00">2026-10-20</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/19/ollvm-deobfuscation-Oo0l1IVvMm/" title="从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生"/></a><div class="content"><a class="title" href="/2026/10/19/ollvm-deobfuscation-Oo0l1IVvMm/" title="从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生">从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生</a><time datetime="2026-10-18T16:00:00.000Z" title="发表于 2026-10-19 00:00:00">2026-10-19</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/" title="某招聘软件 13.160 版本协议逆向分析"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="某招聘软件 13.160 版本协议逆向分析"/></a><div class="content"><a class="title" href="/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/" title="某招聘软件 13.160 版本协议逆向分析">某招聘软件 13.160 版本协议逆向分析</a><time datetime="2026-10-16T16:00:00.000Z" title="发表于 2026-10-17 00:00:00">2026-10-17</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="NepCTF2026 ColorfulArray"/></a><div class="content"><a class="title" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray">NepCTF2026 ColorfulArray</a><time datetime="2026-10-15T18:50:00.000Z" title="发表于 2026-10-16 02:50:00">2026-10-16</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="再探Angr"/></a><div class="content"><a class="title" href="/2026/04/26/%E5%86%8D%E6%8E%A2angr/" title="再探Angr">再探Angr</a><time datetime="2026-04-26T13:15:58.515Z" title="发表于 2026-04-26 21:15:58">2026-04-26</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Ro0t</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div><div class="footer_custom_text">Ro0t · Binary Security Blog</div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script defer src="/js/kof-pet.js?v=mai2"></script><script defer src="/js/like.js?v=1"></script></div></body></html>
