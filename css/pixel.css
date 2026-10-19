@@ -27,6 +27,16 @@
   --px-font: 'Fusion Pixel', 'Courier New', monospace;
 }
 
+
+/* ---------- 强制亮色主题变量走 FC 配色（防止系统浅色模式白卡漏网） ---------- */
+html[data-theme='light'] {
+  --card-bg: #1a1a20;
+  --font-color: #d8d2c0;
+  --card-border: #3a2020;
+  --text-highlight-bg: #3a2020;
+  --blockquote-color: #d8d2c0;
+}
+
 /* ---------- 全局：图片锐利 + 字体基调 ---------- */
 img {
   image-rendering: pixelated;
@@ -115,7 +125,7 @@ body {
 .card-widget,
 #aside-content .card-widget,
 .layout > div:first-child,
-#recent-posts > .recent-post-item,
+.recent-post-item,
 #pagination,
 #archive .article-sort-item,
 .article-sort-item,
