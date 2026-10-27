@@ -1,0 +1,749 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构 | Ro0t's Blog</title><meta name="author" content="Ro0t"><meta name="copyright" content="Ro0t"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="仅供学习交流。文中参数逐条核对过 CCSDS 标准原文，链接在文末。对在轨航天器做射频测试需要合法授权，这篇只聊协议格式。  起因前阵子看太空安全的东西，发现卫星测控这块的中文资料少得出奇，偶尔搜到几篇也是照着标准目录念，没有真拿参数跑通过的。干脆自己把 GJB1198 这套帧格式拆一遍，从一条指令到最终能发射的码流全部走通，顺便把遥测那边的帧也拆了。 先说个省事的路子：GJB1198 系列基本">
+<meta property="og:type" content="article">
+<meta property="og:title" content="初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构">
+<meta property="og:url" content="https://woye969.github.io/2026/10/27/%E5%88%9D%E6%8E%A2%E5%8D%AB%E6%98%9F%E6%B5%8B%E6%8E%A7%E5%B8%A7%EF%BC%9AGJB1198%E9%81%A5%E6%8E%A7%E5%B8%A7%E5%88%B6%E4%BD%9C%E4%B8%8E%E9%81%A5%E6%B5%8B%E5%B8%A7%E7%BB%93%E6%9E%84/index.html">
+<meta property="og:site_name" content="Ro0t&#39;s Blog">
+<meta property="og:description" content="仅供学习交流。文中参数逐条核对过 CCSDS 标准原文，链接在文末。对在轨航天器做射频测试需要合法授权，这篇只聊协议格式。  起因前阵子看太空安全的东西，发现卫星测控这块的中文资料少得出奇，偶尔搜到几篇也是照着标准目录念，没有真拿参数跑通过的。干脆自己把 GJB1198 这套帧格式拆一遍，从一条指令到最终能发射的码流全部走通，顺便把遥测那边的帧也拆了。 先说个省事的路子：GJB1198 系列基本">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://woye969.github.io/img/famicom-cover.png">
+<meta property="article:published_time" content="2026-10-27T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-10-27T10:41:48.085Z">
+<meta property="article:author" content="Ro0t">
+<meta property="article:tag" content="CCSDS">
+<meta property="article:tag" content="协议分析">
+<meta property="article:tag" content="卫星">
+<meta property="article:tag" content="太空安全">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://woye969.github.io/img/famicom-cover.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构",
+  "url": "https://woye969.github.io/2026/10/27/%E5%88%9D%E6%8E%A2%E5%8D%AB%E6%98%9F%E6%B5%8B%E6%8E%A7%E5%B8%A7%EF%BC%9AGJB1198%E9%81%A5%E6%8E%A7%E5%B8%A7%E5%88%B6%E4%BD%9C%E4%B8%8E%E9%81%A5%E6%B5%8B%E5%B8%A7%E7%BB%93%E6%9E%84/",
+  "image": "https://woye969.github.io/img/famicom-cover.png",
+  "datePublished": "2026-10-27T12:00:00.000Z",
+  "dateModified": "2026-10-27T10:41:48.085Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ro0t",
+      "url": "https://woye969.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon-pixel.png"><link rel="canonical" href="https://woye969.github.io/2026/10/27/%E5%88%9D%E6%8E%A2%E5%8D%AB%E6%98%9F%E6%B5%8B%E6%8E%A7%E5%B8%A7%EF%BC%9AGJB1198%E9%81%A5%E6%8E%A7%E5%B8%A7%E5%88%B6%E4%BD%9C%E4%B8%8E%E9%81%A5%E6%B5%8B%E5%B8%A7%E7%BB%93%E6%9E%84/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          const mediaQueryDark = window.matchMedia('(prefers-color-scheme: dark)')
+          const mediaQueryLight = window.matchMedia('(prefers-color-scheme: light)')
+
+          if (theme === undefined) {
+            if (mediaQueryLight.matches) activateLightMode()
+            else if (mediaQueryDark.matches) activateDarkMode()
+            else {
+              const hour = new Date().getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            mediaQueryDark.addEventListener('change', () => {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else {
+            theme === 'light' ? activateLightMode() : activateDarkMode()
+          }
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/pixel.css?v=mobilefix"><meta name="generator" content="Hexo 8.1.1"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">12</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">13</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">2</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/famicom-cover.png);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Ro0t's Blog</span></a><a class="nav-page-title" href="/"><span class="site-name">初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-10-27T12:00:00.000Z" title="发表于 2026-10-27 20:00:00">2026-10-27</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-10-27T10:41:48.085Z" title="更新于 2026-10-27 18:41:48">2026-10-27</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E5%A4%AA%E7%A9%BA%E5%AE%89%E5%85%A8/">太空安全</a></span></div><div class="meta-secondline"></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p>仅供学习交流。文中参数逐条核对过 CCSDS 标准原文，链接在文末。对在轨航天器做射频测试需要合法授权，这篇只聊协议格式。</p>
+</blockquote>
+<h2 id="起因"><a href="#起因" class="headerlink" title="起因"></a>起因</h2><p>前阵子看太空安全的东西，发现卫星测控这块的中文资料少得出奇，偶尔搜到几篇也是照着标准目录念，没有真拿参数跑通过的。干脆自己把 GJB1198 这套帧格式拆一遍，从一条指令到最终能发射的码流全部走通，顺便把遥测那边的帧也拆了。</p>
+<p>先说个省事的路子：GJB1198 系列基本是 CCSDS 的国产化版本。1198.7A-2004 前言原话，”参照了 CCSDS 有关标准，技术内容一致”。所以 GJB 里没写细的地方，直接翻 CCSDS 对应版本就行。这次我把用到的几份 CCSDS 标准原文都下了，文里所有多项式、同步序列、位域宽度都是从 PDF 里抠的，不是凭记忆写的——这块记忆坑过我，后面会讲到。</p>
+<p>还有一个分册的坑：遥控是第 7 部分（1198.7A），第 6 部分（1198.6A）是分包遥测。我一开始一直念叨 1198.6A 的遥控帧，实际上上行下行是两套东西、两个分册。</p>
+<h2 id="一、先看全局"><a href="#一、先看全局" class="headerlink" title="一、先看全局"></a>一、先看全局</h2><p>上行链路，一条指令从落地到上天要过这么几道：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">指令/数据 42B</span><br><span class="line">  ↓ 封包</span><br><span class="line">遥控包 48B          6字节包头 + 数据</span><br><span class="line">  ↓ 组帧</span><br><span class="line">TC帧 53B            5字节主导头 + 遥控包</span><br><span class="line">  ↓ 加CRC</span><br><span class="line">TC帧+FECTF 55B      尾部2字节CRC-16</span><br><span class="line">  ↓ 加扰</span><br><span class="line">加扰帧 55B          逐bit异或伪随机序列，长度不变</span><br><span class="line">  ↓ 分块编码</span><br><span class="line">8个64bit码块        440bit补到448bit，每块加校验</span><br><span class="line">  ↓ 组CLTU</span><br><span class="line">CLTU 74B            EB90 + 码块流 + C5...7D</span><br><span class="line">  ↓ 调制</span><br><span class="line">PCM/PSK 射频信号 → 卫星</span><br></pre></td></tr></table></figure>
+
+<p>表格版，方便对着看每一步字节怎么涨的：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>长度</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>应用数据</td>
+<td>42 B</td>
+<td>原始指令内容</td>
+</tr>
+<tr>
+<td>遥控包</td>
+<td>48 B</td>
+<td>加6B包头</td>
+</tr>
+<tr>
+<td>TC帧</td>
+<td>53 B</td>
+<td>加5B主导头</td>
+</tr>
+<tr>
+<td>帧尾加FECTF</td>
+<td>55 B</td>
+<td>加2B CRC</td>
+</tr>
+<tr>
+<td>加扰后</td>
+<td>55 B</td>
+<td>长度不变</td>
+</tr>
+<tr>
+<td>CLTU</td>
+<td>74 B</td>
+<td>16 + 64×8 + 64 bit，整字节对齐</td>
+</tr>
+</tbody></table>
+<p>下行遥测是另一套帧，结构不一样：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">载荷/平台数据</span><br><span class="line">  ↓ 封包</span><br><span class="line">遥测包              6字节包头（跟遥控包同构）</span><br><span class="line">  ↓ 装进定长帧</span><br><span class="line">VCDU 508B           8字节主导头 + 插入域46 + 数据域448 + OCF4 + CRC2</span><br><span class="line">  ↓ 下行加扰（ASM不参与）</span><br><span class="line">  ↓ 前面拼帧同步字</span><br><span class="line">CADU 512B           1ACFFC1D + VCDU</span><br><span class="line">  ↓ 信道编码（RS/卷积/LDPC）+ 调制</span><br><span class="line">射频信号 → 地面站</span><br></pre></td></tr></table></figure>
+
+<p>链路是对称的，发送端每一步接收端都有逆操作。上行解链就是搜 <code>EB90</code>、逐码块校验、解扰、查CRC、取包；下行是搜 <code>1ACFFC1D</code>、解扰、拆主导头、按虚拟信道分路提包。第八节拿代码把上行这条路完整走了一遍反向。</p>
+<p>下面从上行的壳开始拆。</p>
+<h2 id="二、遥控帧长什么样"><a href="#二、遥控帧长什么样" class="headerlink" title="二、遥控帧长什么样"></a>二、遥控帧长什么样</h2><h3 id="包头"><a href="#包头" class="headerlink" title="包头"></a>包头</h3><p>应用数据先封成遥控包，包头固定 6 字节：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>位宽</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>包版本号</td>
+<td>3 bit</td>
+<td>固定 <code>000</code></td>
+</tr>
+<tr>
+<td>包类型</td>
+<td>1 bit</td>
+<td>0 &#x3D; 遥控数据包</td>
+</tr>
+<tr>
+<td>二级头标志</td>
+<td>1 bit</td>
+<td>有无辅助导头</td>
+</tr>
+<tr>
+<td>APID</td>
+<td>11 bit</td>
+<td>发给哪个应用过程</td>
+</tr>
+<tr>
+<td>序列标志</td>
+<td>2 bit</td>
+<td><code>11</code> &#x3D; 单包不分段</td>
+</tr>
+<tr>
+<td>包序列计数</td>
+<td>14 bit</td>
+<td>同APID内累加</td>
+</tr>
+<tr>
+<td>包长度</td>
+<td>16 bit</td>
+<td>总长 - 1</td>
+</tr>
+</tbody></table>
+<p>包长度存的是总字节数减一，这个 −1 约定在包和帧两级都出现，而且后面帧长度还会再坑一次，记住这个套路。</p>
+<h3 id="帧主导头"><a href="#帧主导头" class="headerlink" title="帧主导头"></a>帧主导头</h3><p>帧主导头 5 字节 40 bit，逐 bit 是这样的：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>位宽</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>版本号</td>
+<td>2 bit</td>
+<td>固定 <code>00</code></td>
+</tr>
+<tr>
+<td>旁路标志</td>
+<td>1 bit</td>
+<td>1 &#x3D; 跳过星上FARM校验，第六节再说它</td>
+</tr>
+<tr>
+<td>控制命令标志</td>
+<td>1 bit</td>
+<td>1 &#x3D; 帧里装的是内务控制命令</td>
+</tr>
+<tr>
+<td>备用</td>
+<td>2 bit</td>
+<td><code>00</code></td>
+</tr>
+<tr>
+<td>SCID</td>
+<td>10 bit</td>
+<td>航天器身份证号，0~1023</td>
+</tr>
+<tr>
+<td>VCID</td>
+<td>6 bit</td>
+<td>虚拟信道，一条物理信道最多64条</td>
+</tr>
+<tr>
+<td>帧长度</td>
+<td>10 bit</td>
+<td>总字节数 - 1，上限1024字节</td>
+</tr>
+<tr>
+<td>帧序列号 N(S)</td>
+<td>8 bit</td>
+<td>每条VC独立计数（模256），星上查序用</td>
+</tr>
+</tbody></table>
+<p>这里有两个地方我第一次都搞错了。</p>
+<p>一个是 SCID 的位宽。遥控帧是 10 bit，遥测帧只有 8 bit，两套帧长得像，我一开始照着遥测的习惯写，怎么组都不对，回头翻 232.0-B-3 的 Figure 4-2 才发现位宽就不一样，1992 年的 202.0-B-2 里也是明明白白写着十位。解帧的时候如果发现 SCID 对不上号，先想想是不是拿错帧型了。</p>
+<p>另一个是帧长域的计数范围。它是从主导头第一个 bit 数到 FECTF 最后一个 bit，也就是说把 CRC 那 2 字节也算在内。我第一版代码只数了头加数据，CRC 校验自然过不了。</p>
+<p>组出来的帧头长这样（SCID&#x3D;42，VCID&#x3D;0，N(S)&#x3D;1，数据域48字节的遥控包）：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">00 2A 00 36 01 │ 00 64 C0 00 00 2F 47 4A 42 ...</span><br><span class="line">└─ 主导头5字节 ─┘└────── 遥控包 ──────→</span><br><span class="line">  SCID=0x2A, 帧长域=0x036(54)=55-1, N(S)=1</span><br></pre></td></tr></table></figure>
+
+<h3 id="数据域里装什么"><a href="#数据域里装什么" class="headerlink" title="数据域里装什么"></a>数据域里装什么</h3><p>数据域最多 1019 字节（带CRC时1017），装的东西由主导头那两个标志位决定，能装四种：完整或者多个遥控包；分段数据（大包切段，段前可加1字节段头，2 bit序列标志 + 6 bit MAP ID）；没数据时的填充；以及控制命令——这个特殊，第六节单独讲。</p>
+<h3 id="帧尾的CRC"><a href="#帧尾的CRC" class="headerlink" title="帧尾的CRC"></a>帧尾的CRC</h3><p>帧尾跟 2 字节 FECTF，参数没什么花样：生成多项式 G(X) &#x3D; X¹⁶+X¹²+X⁵+1，寄存器预置全1，MSB先行。校验范围是主导头加数据域，不含它自己。这套参数等价于通用的 CRC-16&#x2F;CCITT-FALSE，拿 <code>&quot;123456789&quot;</code> 一验就出 0x29B1：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">crc16_ccsds</span>(<span class="params">data: <span class="built_in">bytes</span></span>) -&gt; <span class="built_in">int</span>:</span><br><span class="line">    <span class="string">&quot;&quot;&quot;G(X)=X^16+X^12+X^5+1, 寄存器预置全1, MSB先传&quot;&quot;&quot;</span></span><br><span class="line">    crc = <span class="number">0xFFFF</span></span><br><span class="line">    <span class="keyword">for</span> b <span class="keyword">in</span> data:</span><br><span class="line">        crc ^= b &lt;&lt; <span class="number">8</span></span><br><span class="line">        <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">            crc = ((crc &lt;&lt; <span class="number">1</span>) ^ <span class="number">0x1021</span>) <span class="keyword">if</span> crc &amp; <span class="number">0x8000</span> <span class="keyword">else</span> (crc &lt;&lt; <span class="number">1</span>)</span><br><span class="line">            crc &amp;= <span class="number">0xFFFF</span></span><br><span class="line">    <span class="keyword">return</span> crc</span><br></pre></td></tr></table></figure>
+
+<h2 id="三、加扰"><a href="#三、加扰" class="headerlink" title="三、加扰"></a>三、加扰</h2><p>帧里的字节都很规矩，包头 <code>00 2A</code>、填充一长串 <code>00</code>，直接发出去位同步器就要饿死——码流里长期没有跳变，锁相环直接失锁。所以发之前用一个伪随机序列把帧搅成白噪声的样子，收端拿同一个序列再异或一次就还原了。</p>
+<p>1198.7A 前言的修订说明里有一句”新增遥控数据随机化处理”，说明91版还没有这一步，2004年的A版才加上。老资料的流程图里要是没有加扰框，记得看年代。</p>
+<p>上行加扰器是个 8 级 LFSR，多项式：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">h(x) = x^8 + x^6 + x^4 + x^3 + x^2 + x + 1</span><br></pre></td></tr></table></figure>
+
+<p>初态全1，每帧起点重置，序列 255 bit 一个周期，帧再长就循环用。加扰范围是整个传输帧含 CRC，CLTU 的头尾序列不参与。</p>
+<p>多项式翻译成递推式就是（缺 x⁷、x⁵ 项，所以反馈不取 s(n−1) 和 s(n−3)）：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">s(n) = s(n-2) ⊕ s(n-4) ⊕ s(n-5) ⊕ s(n-6) ⊕ s(n-7) ⊕ s(n-8)</span><br></pre></td></tr></table></figure>
+
+<p>写代码就是几行，掩码 0xFA 对应参与反馈的那几个寄存器位：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">prbs</span>(<span class="params">taps: <span class="built_in">int</span>, nbits: <span class="built_in">int</span></span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;8级LFSR, 全1初态, MSB先出; taps=反馈抽头掩码&quot;&quot;&quot;</span></span><br><span class="line">    state, out = <span class="number">0xFF</span>, []</span><br><span class="line">    <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(nbits):</span><br><span class="line">        out.append(state &gt;&gt; <span class="number">7</span>)                        <span class="comment"># 输出最高位</span></span><br><span class="line">        fb = <span class="built_in">bin</span>(state &amp; taps).count(<span class="string">&#x27;1&#x27;</span>) &amp; <span class="number">1</span>         <span class="comment"># 反馈位</span></span><br><span class="line">        state = ((state &lt;&lt; <span class="number">1</span>) | fb) &amp; <span class="number">0xFF</span></span><br><span class="line">    <span class="keyword">return</span> out</span><br><span class="line"></span><br><span class="line">TC_TAPS = <span class="number">0xFA</span>   <span class="comment"># 上行 h(x)=x8+x6+x4+x3+x2+x+1</span></span><br><span class="line">TM_TAPS = <span class="number">0x95</span>   <span class="comment"># 下行 h(x)=x8+x7+x5+x3+1</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">scramble_bits</span>(<span class="params">bits, taps</span>):</span><br><span class="line">    seq = prbs(taps, <span class="built_in">len</span>(bits))</span><br><span class="line">    <span class="keyword">return</span> [b ^ s <span class="keyword">for</span> b, s <span class="keyword">in</span> <span class="built_in">zip</span>(bits, seq)]</span><br></pre></td></tr></table></figure>
+
+<p>标准原文直接给了序列前 40 bit（231.0-B-3 §6.2），拿来自检：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">1111 1111 0011 1001 1001 1110 0101 1010 0110 1000  →  FF 39 9E 5A 68</span><br></pre></td></tr></table></figure>
+
+<p>我的第一版实现跑出来不对，检查半天发现是反馈掩码推错了位序。这种地方别信自己的推导，拿标准给的参考序列当断言，跑不过就是写错了。</p>
+<p>对了，上行和下行是两个不同的扰码器，别搞混：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>上行遥控</th>
+<th>下行遥测&#x2F;AOS</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>多项式</td>
+<td>x⁸+x⁶+x⁴+x³+x²+x+1</td>
+<td>x⁸+x⁷+x⁵+x³+1</td>
+</tr>
+<tr>
+<td>掩码</td>
+<td>0xFA</td>
+<td>0x95</td>
+</tr>
+<tr>
+<td>序列开头</td>
+<td>FF 39 9E 5A 68</td>
+<td>FF 48 0E C0 9A</td>
+</tr>
+<tr>
+<td>同步基准</td>
+<td>帧起点重置</td>
+<td>ASM之后开始（ASM本身不加扰）</td>
+</tr>
+</tbody></table>
+<p>最后说个重要的事：加扰不等于加密。多项式、初值、周期全印在标准里，谁拿到码流都能解开。我见过有人把”解出了扰码”当成”破解了卫星遥控”，这就好比把 base64 解了说自己黑了服务器。真正的保密和防篡改靠的是 SDLS（CCSDS 352.0-B，数据链路层的 AES-GCM），2015 年才标准化，存量卫星基本没装。</p>
+<h2 id="四、BCH和CLTU"><a href="#四、BCH和CLTU" class="headerlink" title="四、BCH和CLTU"></a>四、BCH和CLTU</h2><p>1198.7A 前言里有句”信道编码码块长度固定为 64bit”。底层算法是 BCH(63,56)，生成多项式：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">g(x) = x^7 + x^6 + x^2 + 1</span><br></pre></td></tr></table></figure>
+
+<p>但实际发射的码块是 64 bit，结构是 56 bit 信息 + 7 bit 校验 + 1 bit 恒 0 填充。</p>
+<p>这里有个我这次踩的最大的坑：<strong>那 7 位校验位要按位取反之后才进码块</strong>。这是 modified BCH 的魔改点，取反是为了保证码块里有足够跳变、顺便让收端能发现码块滑位。我第一版按教科书的标准系统码写，编码输出怎么都对不上预期，翻原文才发现 §3.2.2 里白纸黑字写着 “COMPLEMENTS of the seven parity check bits”。所以别只看公式，标准正文里的那个大写 COMPLEMENTS 是关键词。</p>
+<p>纠检错能力标准也写明了：纠1检2（SEC），或者检3（TED），任务方二选一。</p>
+<p>最后一块凑不满 56 bit 的话，用交替 0&#x2F;1、从 0 开始的样式填——bit 流看着是 <code>010101...</code>，按字节看就是一串 0x55，这就是”55H填充”的来历。</p>
+<p>码块流前后再装上车头车尾，就是 CLTU：</p>
+<table>
+<thead>
+<tr>
+<th>部件</th>
+<th>位宽</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>起始序列</td>
+<td>16 bit</td>
+<td><code>EB 90</code></td>
+</tr>
+<tr>
+<td>码块流</td>
+<td>64 × n bit</td>
+<td>55H填充到整块</td>
+</tr>
+<tr>
+<td>结尾序列</td>
+<td>64 bit</td>
+<td><code>C5×7 + 7D</code></td>
+</tr>
+</tbody></table>
+<p>结尾序列选 <code>C5C5...</code> 挺有意思——它长得就像填充样式，但拿去跑校验必错，译码器一看就知道数据到头了，”撞墙”停机。</p>
+<h2 id="五、新旧版本的坑"><a href="#五、新旧版本的坑" class="headerlink" title="五、新旧版本的坑"></a>五、新旧版本的坑</h2><p>CCSDS 231.0-B-3（2017版）把 CLTU 的头尾改了，GJB 1198.7A-2004 跟的是老参数：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>老版（1198.7A &#x2F; 202.1-B-2）</th>
+<th>231.0-B-3 (2017)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>起始序列</td>
+<td><code>EB90</code></td>
+<td><code>FF00</code></td>
+</tr>
+<tr>
+<td>码块</td>
+<td>64bit（56+7取反+1填0）</td>
+<td>不变</td>
+</tr>
+<tr>
+<td>结尾序列</td>
+<td><code>C5×7 + 7D</code></td>
+<td><code>C5×7 + 79</code></td>
+</tr>
+<tr>
+<td>加扰</td>
+<td>可选</td>
+<td>BCH可选 &#x2F; LDPC强制</td>
+</tr>
+</tbody></table>
+<p>我一开始查资料的时候被这两套参数搞得一头雾水，EB90 和 FF00 都有人写，还以为是哪个写错了。动手解帧之前先搞清楚目标跟的是哪代标准，能省很多无谓的怀疑人生。</p>
+<h2 id="六、指令的问题"><a href="#六、指令的问题" class="headerlink" title="六、指令的问题"></a>六、指令的问题</h2><p>前面几节讲的是壳，这节讲瓤——指令本身在这套体系里是怎么回事。</p>
+<h3 id="指令分两类"><a href="#指令分两类" class="headerlink" title="指令分两类"></a>指令分两类</h3><p>工程上星上的遥控指令分两种。直接指令是开关机、切机、通路切换这种硬指令，帧到星上之后由指令单元硬件直接译码输出电平，不经过软件，延迟小可靠性高；数据指令（也叫注入数据）是程序上注、参数装订、密钥更新这种大块头，以遥控包的形式交给星载计算机解释执行。直接指令通常就几个字节，完整走一遍包→帧→CLTU；数据指令长，一帧装不下就按段切，这就是数据域里段头存在的原因。</p>
+<h3 id="帧的四种形态"><a href="#帧的四种形态" class="headerlink" title="帧的四种形态"></a>帧的四种形态</h3><p>主导头的”旁路标志 × 控制命令标志”能组合出四种帧（202.0-B-2 的 Table 4-1）：</p>
+<table>
+<thead>
+<tr>
+<th>Bypass</th>
+<th>Ctrl</th>
+<th>类型</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>0</td>
+<td>Type-AD</td>
+<td>数据帧，FARM全项校验，最常用</td>
+</tr>
+<tr>
+<td>0</td>
+<td>1</td>
+<td>Type-AC</td>
+<td>早期版本保留</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0</td>
+<td>Type-BD</td>
+<td>数据帧，跳过FARM校验，加急用</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>Type-BC</td>
+<td>控制命令帧</td>
+</tr>
+</tbody></table>
+<p>细品一下这个设计：控制命令帧（BC）必须旁路，因为命令本身就是管 FARM 的，让 FARM 的序列号检查把管自己的命令拦下来就死循环了。新版 232.0-B-3 把 BD&#x2F;BC 简称成 Type-B&#x2F;Type-C，意思没变。</p>
+<h3 id="UNLOCK-和-SET-V-R"><a href="#UNLOCK-和-SET-V-R" class="headerlink" title="UNLOCK 和 SET V(R)"></a>UNLOCK 和 SET V(R)</h3><p>控制命令帧的数据域就定义了两条命令，而且新老标准码型一致（我在 1992 年的 202.0-B-2 和 2015 年的 232.0-B-3 里都核了一遍）：</p>
+<ul>
+<li>UNLOCK：单字节全 0（<code>0x00</code>）。让 FARM 从 LOCKOUT 之类的异常状态里解锁，恢复收帧；</li>
+<li>SET V(R)：三字节 <code>82 00 XX</code>。强行把星上接收序号 V(R) 拨到 XX，链路重置后对齐计数用。</li>
+</ul>
+<p>其余码型全部保留。这两条算是链路排障的急救包：星上连续拒收进入 LOCKOUT，发 UNLOCK；序列号失步，发 SET V(R)。</p>
+<h3 id="三类操作和加急"><a href="#三类操作和加急" class="headerlink" title="三类操作和加急"></a>三类操作和加急</h3><p>1198.7A 前言还有句”遥控操作三类重点推荐第二类……增加加急业务一种子类”。三类是按执行时机分的：收到就执行、带时间标到点执行、条件满足触发。推荐的是第二类——时间符合指令方便批量装定、按时序动作，实际任务里用得最多。加急则是插队通道，紧急指令可以走 Type-BD 旁路帧跳过序列号检查快速上行。快是快，但 FARM 校验一关，等于把防重放那道门也拆了，这个设计安全上怎么看都不算高明，第十节再说。</p>
+<h3 id="COP-1：闭环在哪"><a href="#COP-1：闭环在哪" class="headerlink" title="COP-1：闭环在哪"></a>COP-1：闭环在哪</h3><p>遥控不是单工广播。地面有个 FOP（帧操作规程），星上有个 FARM（帧接受和报告机制），俩人靠上行数据帧 + 下行 CLCW 回执配合，这就是 COP-1：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">地面 FOP                              星上 FARM</span><br><span class="line">│ 发 Type-A 帧, N(S)=k  ──上行──→  │ 校验版本/MCID/长度/序列号/CRC</span><br><span class="line">│                                  │ ├ 通过：执行，V(R)→k+1</span><br><span class="line">│                                  │ └ 失败：拒收，置 Retransmit/Lockout</span><br><span class="line">│ ←── 下行OCF里的CLCW回执 ────────  │</span><br><span class="line">│ 比对V(R)：等于k+1发新帧，         │</span><br><span class="line">│ 等于k就Go-back-N重传              │</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，上行发得好不好，星上每帧都有回执，通过下行遥测帧的 OCF 那 4 字节捎回来。CLCW 的位域排布（新老标准一致）：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>位宽</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>控制字类型</td>
+<td>1 bit</td>
+<td>0 &#x3D; CLCW</td>
+</tr>
+<tr>
+<td>版本</td>
+<td>2 bit</td>
+<td><code>00</code></td>
+</tr>
+<tr>
+<td>状态域</td>
+<td>3 bit</td>
+<td>任务自定义</td>
+</tr>
+<tr>
+<td>COP在用</td>
+<td>2 bit</td>
+<td><code>01</code> &#x3D; COP-1</td>
+</tr>
+<tr>
+<td>VCID</td>
+<td>6 bit</td>
+<td>汇报哪条上行VC</td>
+</tr>
+<tr>
+<td>备用</td>
+<td>2 bit</td>
+<td><code>00</code></td>
+</tr>
+<tr>
+<td>标志×5</td>
+<td>5 bit</td>
+<td>无载波&#x2F;未位锁&#x2F;锁定&#x2F;等待&#x2F;重传</td>
+</tr>
+<tr>
+<td>FARM-B计数</td>
+<td>2 bit</td>
+<td>内务命令计数</td>
+</tr>
+<tr>
+<td>备用</td>
+<td>1 bit</td>
+<td>0</td>
+</tr>
+<tr>
+<td>V(R)</td>
+<td>8 bit</td>
+<td>星上期待的下一帧序列号</td>
+</tr>
+</tbody></table>
+<p>这一段是排障金矿：V(R) 不动说明帧没被收下，LOCKOUT 置 1 说明星上收到过违规帧在闹脾气，NO BIT LOCK 是射频信号质量不行。分析下行数据的时候，我建议先把 OCF 这 4 字节解出来，等于免费看了星上遥控接收机的状态机。</p>
+<h2 id="七、遥测这边"><a href="#七、遥测这边" class="headerlink" title="七、遥测这边"></a>七、遥测这边</h2><p>下行有两代结构：经典分包遥测的 TM 传输帧，和 AOS 体制的 VCDU。1198.6A 里你手里那种 508 字节的结构就是 VCDU。两代现役都有，都得会拆。</p>
+<h3 id="遥测包"><a href="#遥测包" class="headerlink" title="遥测包"></a>遥测包</h3><p>遥测包的包头和遥控包完全同构，6 字节，字段排布一模一样，只是语义上 APID 表示数据从哪个分系统来。所以第九节代码里 <code>make_space_packet()</code> 一套函数两种用途。</p>
+<h3 id="TM传输帧"><a href="#TM传输帧" class="headerlink" title="TM传输帧"></a>TM传输帧</h3><p>TM 帧主导头 6 字节 48 bit（132.0-B-2）：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>位宽</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>版本号</td>
+<td>2 bit</td>
+<td><code>00</code></td>
+</tr>
+<tr>
+<td>SCID</td>
+<td>8 bit</td>
+<td>又是8bit，跟遥控的10bit区分开</td>
+</tr>
+<tr>
+<td>VCID</td>
+<td>6 bit</td>
+<td>虚拟信道</td>
+</tr>
+<tr>
+<td>OCF标志</td>
+<td>1 bit</td>
+<td>1 &#x3D; 帧尾带OCF</td>
+</tr>
+<tr>
+<td>MCFC</td>
+<td>8 bit</td>
+<td>主信道帧计数，整条链路统一累加</td>
+</tr>
+<tr>
+<td>VCFC</td>
+<td>8 bit</td>
+<td>虚信道帧计数，每VC独立</td>
+</tr>
+<tr>
+<td>二级头标志</td>
+<td>1 bit</td>
+<td>数据域带不带帧二级头</td>
+</tr>
+<tr>
+<td>同步标志</td>
+<td>1 bit</td>
+<td>数据域同步（装包）还是异步（位流）</td>
+</tr>
+<tr>
+<td>包序标志</td>
+<td>1 bit</td>
+<td>配合段长ID</td>
+</tr>
+<tr>
+<td>段长ID</td>
+<td>2 bit</td>
+<td>段化方式</td>
+</tr>
+<tr>
+<td>首导头指针 FHP</td>
+<td>11 bit</td>
+<td>数据域内第一个包头的字节偏移，全1&#x3D;本帧没有新包头</td>
+</tr>
+</tbody></table>
+<p>TM 帧和遥控帧有个本质区别：<strong>长度固定，帧里不存长度域</strong>。整条信道的帧等长，靠帧同步字定界。找帧边界的方式完全不同，解析器写法也不一样。</p>
+<p>首导头指针是提包的关键。遥测包是连续流进数据域的，一个包经常被切在两帧里，接收端按 FHP 指的偏移开始拼包，拼完一个用包头里的长度域找下一个；FHP 全 1 表示本帧只是上帧的延续，没有新包开头。MCFC 和 VCFC 双计数也好用：主信道计数查整链路丢帧，虚信道计数查单个业务丢帧。</p>
+<h3 id="VCDU和CADU"><a href="#VCDU和CADU" class="headerlink" title="VCDU和CADU"></a>VCDU和CADU</h3><p>VCDU 508 字节定长，结构：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">CADU 512B = [ 帧同步字 1ACFFC1D 4B | VCDU 508B ]</span><br><span class="line"></span><br><span class="line">VCDU = [ 主导头 8B | 插入域 46B | 数据域 448B | OCF 4B | CRC 2B ]</span><br></pre></td></tr></table></figure>
+
+<p>主导头那 8 字节，对应 CCSDS AOS 的”6 字节主导头 + 2 字节首头纠错”：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>位宽</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>版本号</td>
+<td>2 bit</td>
+<td>AOS v2 固定 <code>01</code></td>
+</tr>
+<tr>
+<td>SCID</td>
+<td>8 bit</td>
+<td></td>
+</tr>
+<tr>
+<td>VCID</td>
+<td>6 bit</td>
+<td></td>
+</tr>
+<tr>
+<td>VC帧计数</td>
+<td>24 bit</td>
+<td>每VC独立累加，丢帧检测</td>
+</tr>
+<tr>
+<td>信令域</td>
+<td>8 bit</td>
+<td>重放标志1+计数使用标志1+备用2+计数循环4</td>
+</tr>
+<tr>
+<td>首头纠错 FHEC</td>
+<td>2 字节</td>
+<td>RS派生纠错码，保护主导头，可纠2个符号错</td>
+</tr>
+</tbody></table>
+<p>主导头单独配纠错码是有道理的：数据域错个 bit 损失一条数据，头错个 bit 整帧报废。FHEC 的具体编码我这没实现，示例代码里直接置 0 了，要用的话照 732.0-B-4 的映射表算。</p>
+<p>插入域 46 字节装周期性的小数据——时间码、星上时广播、工程参数快照，长度频率都固定，接收端拿它当心跳。</p>
+<p>数据域 448 字节装遥测包，包流外面套一层 M_PDU：头 2 字节 &#x3D; 5 bit 保留 + 11 bit 首导头指针，跟 TM 帧的 FHP 一个思路。OCF 那 4 字节就是第六节讲的 CLCW，上行闭环的回执从这里回来。CRC 2 字节跟上行算法相同，覆盖 OCF 之前的整个 VCDU。</p>
+<p>VCDU 前面拼 4 字节同步字 <code>1A CF FC 1D</code>（ASM）就是 CADU。下行加扰用另一个多项式 x⁸+x⁷+x⁵+x³+1，从 ASM 之后开始，ASM 本身不动——收端先搜 ASM，找到后重置扰码器相位再逐 bit 解扰。</p>
+<h3 id="TM帧和VCDU什么关系"><a href="#TM帧和VCDU什么关系" class="headerlink" title="TM帧和VCDU什么关系"></a>TM帧和VCDU什么关系</h3><table>
+<thead>
+<tr>
+<th></th>
+<th>TM帧</th>
+<th>VCDU</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>体系</td>
+<td>经典分包遥测（132.0）</td>
+<td>AOS（732.0）</td>
+</tr>
+<tr>
+<td>帧头</td>
+<td>6字节</td>
+<td>8字节（含FHEC）</td>
+</tr>
+<tr>
+<td>帧长</td>
+<td>定长</td>
+<td>定长</td>
+</tr>
+<tr>
+<td>提包</td>
+<td>帧头里的FHP</td>
+<td>M_PDU头里的FHP</td>
+</tr>
+<tr>
+<td>插入域</td>
+<td>没有</td>
+<td>有，46B</td>
+</tr>
+</tbody></table>
+<p>共同点是都是定长帧、靠 ASM 定界、OCF 捎 CLCW。所以下行解链的前几步（搜同步字、解扰、校验头）两代通用，走到数据域才分叉。1198.6 的新旧版本分别对应这两代，看星下饭。</p>
+<h2 id="八、逆向：把码流解回去"><a href="#八、逆向：把码流解回去" class="headerlink" title="八、逆向：把码流解回去"></a>八、逆向：把码流解回去</h2><p>链路对称，收端就是发端的逆操作。上行的完整解链：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">比特流 → 搜EB90 → 逐64bit码块BCH校验(纠1检2/检3)</span><br><span class="line">  → 遇结尾序列停机 → 去填充 → 异或扰码序列解扰</span><br><span class="line">  → FARM帧校验(版本/MCID/头部一致性/帧长/CRC五项)</span><br><span class="line">  → 按帧长取帧 → Type-AD查序列号再执行，Type-BD直接执行</span><br><span class="line">  → 取遥控包按APID分发</span><br></pre></td></tr></table></figure>
+
+<p>下行类似：搜 <code>1ACFFC1D</code> → 信道解码 → 解扰 → FHEC保护下的主导头解析 → 按VCID分路查计数 → M_PDU提包 → OCF取CLCW。</p>
+<p>九的代码里做了个完整的 round-trip：把造出来的 CLTU 当成一段收到的未知数据，按上面流程解回去，最后断言还原出的帧和原始帧逐字节相同。做协议分析的时候这种双向验证很值——编码器写错能被解码器抓出来，解码器写错也能被编码器抓出来。</p>
+<h2 id="九、完整代码与运行结果"><a href="#九、完整代码与运行结果" class="headerlink" title="九、完整代码与运行结果"></a>九、完整代码与运行结果</h2><p>全部流程，Python 3，零依赖：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># -*- coding: utf-8 -*-</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;GJB1198 测控帧完整流程</span></span><br><span class="line"><span class="string">上行: 遥控包→TC帧→FECTF→加扰→BCH码块→CLTU (接收端反向还原)</span></span><br><span class="line"><span class="string">下行: 遥测包→TM帧 / VCDU→CADU&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">hexdump</span>(<span class="params">data, limit=<span class="number">16</span></span>):</span><br><span class="line">    h = data.<span class="built_in">hex</span>().upper()</span><br><span class="line">    sp = <span class="string">&#x27; &#x27;</span>.join(h[i:i+<span class="number">2</span>] <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0</span>, <span class="built_in">len</span>(h), <span class="number">2</span>))</span><br><span class="line">    <span class="keyword">return</span> sp[:limit*<span class="number">3</span>] + <span class="string">&#x27; ...&#x27;</span> <span class="keyword">if</span> <span class="built_in">len</span>(sp) &gt; limit * <span class="number">3</span> <span class="keyword">else</span> sp</span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- 比特工具 ----------</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">bits_of</span>(<span class="params">data: <span class="built_in">bytes</span></span>):</span><br><span class="line">    <span class="keyword">return</span> [(b &gt;&gt; i) &amp; <span class="number">1</span> <span class="keyword">for</span> b <span class="keyword">in</span> data <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">7</span>, -<span class="number">1</span>, -<span class="number">1</span>)]</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">pack_bits</span>(<span class="params">bits</span>):</span><br><span class="line">    out = <span class="built_in">bytearray</span>()</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0</span>, <span class="built_in">len</span>(bits) - <span class="number">7</span>, <span class="number">8</span>):</span><br><span class="line">        v = <span class="number">0</span></span><br><span class="line">        <span class="keyword">for</span> b <span class="keyword">in</span> bits[i:i+<span class="number">8</span>]:</span><br><span class="line">            v = (v &lt;&lt; <span class="number">1</span>) | b</span><br><span class="line">        out.append(v)</span><br><span class="line">    rem = <span class="built_in">len</span>(bits) % <span class="number">8</span></span><br><span class="line">    <span class="keyword">if</span> rem:                                        <span class="comment"># 尾部不足8bit, 低位补0</span></span><br><span class="line">        v = <span class="number">0</span></span><br><span class="line">        <span class="keyword">for</span> b <span class="keyword">in</span> bits[-rem:]:</span><br><span class="line">            v = (v &lt;&lt; <span class="number">1</span>) | b</span><br><span class="line">        out.append(v &lt;&lt; (<span class="number">8</span> - rem))</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">bytes</span>(out)</span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- FECTF: CRC-16 ----------</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">crc16_ccsds</span>(<span class="params">data: <span class="built_in">bytes</span></span>) -&gt; <span class="built_in">int</span>:</span><br><span class="line">    <span class="string">&quot;&quot;&quot;G(X)=X^16+X^12+X^5+1, 寄存器预置全1, MSB先传&quot;&quot;&quot;</span></span><br><span class="line">    crc = <span class="number">0xFFFF</span></span><br><span class="line">    <span class="keyword">for</span> b <span class="keyword">in</span> data:</span><br><span class="line">        crc ^= b &lt;&lt; <span class="number">8</span></span><br><span class="line">        <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">            crc = ((crc &lt;&lt; <span class="number">1</span>) ^ <span class="number">0x1021</span>) <span class="keyword">if</span> crc &amp; <span class="number">0x8000</span> <span class="keyword">else</span> (crc &lt;&lt; <span class="number">1</span>)</span><br><span class="line">            crc &amp;= <span class="number">0xFFFF</span></span><br><span class="line">    <span class="keyword">return</span> crc</span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- 扰码器 ----------</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">prbs</span>(<span class="params">taps, nbits</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;8级LFSR, 全1初态, MSB先出&quot;&quot;&quot;</span></span><br><span class="line">    state, out = <span class="number">0xFF</span>, []</span><br><span class="line">    <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(nbits):</span><br><span class="line">        out.append(state &gt;&gt; <span class="number">7</span>)</span><br><span class="line">        fb = <span class="built_in">bin</span>(state &amp; taps).count(<span class="string">&#x27;1&#x27;</span>) &amp; <span class="number">1</span></span><br><span class="line">        state = ((state &lt;&lt; <span class="number">1</span>) | fb) &amp; <span class="number">0xFF</span></span><br><span class="line">    <span class="keyword">return</span> out</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">scramble_bits</span>(<span class="params">bits, taps</span>):</span><br><span class="line">    <span class="keyword">return</span> [b ^ s <span class="keyword">for</span> b, s <span class="keyword">in</span> <span class="built_in">zip</span>(bits, prbs(taps, <span class="built_in">len</span>(bits)))]</span><br><span class="line"></span><br><span class="line">TC_TAPS = <span class="number">0xFA</span>   <span class="comment"># 上行 h(x)=x8+x6+x4+x3+x2+x+1</span></span><br><span class="line">TM_TAPS = <span class="number">0x95</span>   <span class="comment"># 下行 h(x)=x8+x7+x5+x3+1</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- BCH码块与CLTU ----------</span></span><br><span class="line">BCH_G = <span class="number">0b11000101</span>   <span class="comment"># g(x) = x^7 + x^6 + x^2 + 1</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">bch_parity</span>(<span class="params">info56: <span class="built_in">int</span></span>) -&gt; <span class="built_in">int</span>:</span><br><span class="line">    reg = info56 &lt;&lt; <span class="number">7</span></span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">55</span>, -<span class="number">1</span>, -<span class="number">1</span>):                    <span class="comment"># 模2除法求7位余数</span></span><br><span class="line">        <span class="keyword">if</span> (reg &gt;&gt; (i + <span class="number">7</span>)) &amp; <span class="number">1</span>:</span><br><span class="line">            reg ^= BCH_G &lt;&lt; i</span><br><span class="line">    <span class="keyword">return</span> reg &amp; <span class="number">0x7F</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">bch64_encode</span>(<span class="params">info56: <span class="built_in">int</span></span>) -&gt; <span class="built_in">int</span>:</span><br><span class="line">    <span class="string">&quot;&quot;&quot;64bit码块 = 56信息 + 7校验(取反) + 1bit恒0&quot;&quot;&quot;</span></span><br><span class="line">    <span class="keyword">return</span> ((info56 &lt;&lt; <span class="number">7</span>) | (~bch_parity(info56) &amp; <span class="number">0x7F</span>)) &lt;&lt; <span class="number">1</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">make_cltu</span>(<span class="params">frame_bits, taps</span>):</span><br><span class="line">    needed = (-<span class="built_in">len</span>(frame_bits)) % <span class="number">56</span>               <span class="comment"># 55H样式交替填充</span></span><br><span class="line">    frame_bits = frame_bits + [i &amp; <span class="number">1</span> <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(needed)]</span><br><span class="line">    cw = []</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0</span>, <span class="built_in">len</span>(frame_bits), <span class="number">56</span>):</span><br><span class="line">        blk = <span class="number">0</span></span><br><span class="line">        <span class="keyword">for</span> b <span class="keyword">in</span> frame_bits[i:i+<span class="number">56</span>]:</span><br><span class="line">            blk = (blk &lt;&lt; <span class="number">1</span>) | b</span><br><span class="line">        v = bch64_encode(blk)</span><br><span class="line">        cw += [(v &gt;&gt; j) &amp; <span class="number">1</span> <span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">63</span>, -<span class="number">1</span>, -<span class="number">1</span>)]</span><br><span class="line">    <span class="keyword">return</span> pack_bits(bits_of(<span class="built_in">bytes</span>.fromhex(<span class="string">&#x27;EB90&#x27;</span>)) + cw +</span><br><span class="line">                     bits_of(<span class="built_in">bytes</span>.fromhex(<span class="string">&#x27;C5C5C5C5C5C5C57D&#x27;</span>)))</span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">parse_cltu</span>(<span class="params">cltu: <span class="built_in">bytes</span>, taps</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;接收端反向: 起始序列→逐码块校验→去扰→FECTF校验&quot;&quot;&quot;</span></span><br><span class="line">    bits = bits_of(cltu)</span><br><span class="line">    <span class="keyword">assert</span> bits[:<span class="number">16</span>] == bits_of(<span class="string">b&#x27;\xEB\x90&#x27;</span>), <span class="string">&#x27;未找到起始序列&#x27;</span></span><br><span class="line">    <span class="keyword">assert</span> pack_bits(bits[-<span class="number">64</span>:]) == <span class="built_in">bytes</span>.fromhex(<span class="string">&#x27;C5C5C5C5C5C5C57D&#x27;</span>), <span class="string">&#x27;结尾序列错误&#x27;</span></span><br><span class="line">    body, raw = bits[<span class="number">16</span>:-<span class="number">64</span>], []</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0</span>, <span class="built_in">len</span>(body), <span class="number">64</span>):</span><br><span class="line">        cw = <span class="number">0</span></span><br><span class="line">        <span class="keyword">for</span> b <span class="keyword">in</span> body[i:i+<span class="number">64</span>]:</span><br><span class="line">            cw = (cw &lt;&lt; <span class="number">1</span>) | b</span><br><span class="line">        info, par = cw &gt;&gt; <span class="number">8</span>, (cw &gt;&gt; <span class="number">1</span>) &amp; <span class="number">0x7F</span></span><br><span class="line">        <span class="keyword">assert</span> bch_parity(info) == (~par &amp; <span class="number">0x7F</span>), <span class="string">&#x27;码块校验失败&#x27;</span></span><br><span class="line">        raw += [(info &gt;&gt; j) &amp; <span class="number">1</span> <span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">55</span>, -<span class="number">1</span>, -<span class="number">1</span>)]</span><br><span class="line">    frame = pack_bits(scramble_bits(raw, taps))    <span class="comment"># 异或同一序列即解扰</span></span><br><span class="line">    n = ((frame[<span class="number">2</span>] &amp; <span class="number">0x3</span>) &lt;&lt; <span class="number">8</span>) | frame[<span class="number">3</span>]         <span class="comment"># 帧长域=总字节数-1</span></span><br><span class="line">    fb = frame[:n+<span class="number">1</span>]                               <span class="comment"># 含FECTF</span></span><br><span class="line">    <span class="keyword">assert</span> crc16_ccsds(fb[:-<span class="number">2</span>]) == <span class="built_in">int</span>.from_bytes(fb[-<span class="number">2</span>:], <span class="string">&#x27;big&#x27;</span>), <span class="string">&#x27;FECTF校验失败&#x27;</span></span><br><span class="line">    <span class="keyword">return</span> fb                                      <span class="comment"># fb[5:-2] 即遥控包</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- 空间包(遥测/遥控主包头同构) ----------</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">make_space_packet</span>(<span class="params">apid, seq_count, payload</span>):</span><br><span class="line">    pkt = <span class="built_in">bytearray</span>()</span><br><span class="line">    pkt += apid.to_bytes(<span class="number">2</span>, <span class="string">&#x27;big&#x27;</span>)                 <span class="comment"># 版本/类型/二级头全0 + APID11</span></span><br><span class="line">    pkt += ((<span class="number">0b11</span> &lt;&lt; <span class="number">14</span>) | (seq_count &amp; <span class="number">0x3FFF</span>)).to_bytes(<span class="number">2</span>, <span class="string">&#x27;big&#x27;</span>)</span><br><span class="line">    pkt += (<span class="built_in">len</span>(payload) + <span class="number">5</span>).to_bytes(<span class="number">2</span>, <span class="string">&#x27;big&#x27;</span>)   <span class="comment"># 包长=总长-1</span></span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">bytes</span>(pkt + payload)</span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- 上行TC帧 ----------</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">make_tc_frame</span>(<span class="params">scid, vcid, seq_no, data</span>):</span><br><span class="line">    n = <span class="built_in">len</span>(data) + <span class="number">6</span>                              <span class="comment"># 帧长域含FECTF</span></span><br><span class="line">    hdr = <span class="built_in">bytearray</span>()</span><br><span class="line">    hdr += (scid &amp; <span class="number">0x3FF</span>).to_bytes(<span class="number">2</span>, <span class="string">&#x27;big&#x27;</span>)       <span class="comment"># 版本/旁路/控制/备用全0 + SCID10</span></span><br><span class="line">    hdr += <span class="built_in">bytes</span>([(vcid &lt;&lt; <span class="number">2</span>) | ((n &gt;&gt; <span class="number">8</span>) &amp; <span class="number">3</span>), n &amp; <span class="number">0xFF</span>, seq_no &amp; <span class="number">0xFF</span>])</span><br><span class="line">    frame = <span class="built_in">bytes</span>(hdr) + data</span><br><span class="line">    <span class="keyword">return</span> frame + crc16_ccsds(frame).to_bytes(<span class="number">2</span>, <span class="string">&#x27;big&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- 下行TM帧 ----------</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">make_tm_frame</span>(<span class="params">scid, vcid, mcfc, vcfc, ocf, data</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;6字节主导头(版本00+SCID8+VCID6 / OCF标志+主计数8+虚计数8 / 二级头+同步+包序+段长ID+首导头指针)&quot;&quot;&quot;</span></span><br><span class="line">    v = ((scid &amp; <span class="number">0xFF</span>) &lt;&lt; <span class="number">38</span>) | (vcid &lt;&lt; <span class="number">32</span>) | (<span class="number">1</span> &lt;&lt; <span class="number">31</span>)          <span class="comment"># OCF标志=1</span></span><br><span class="line">    v |= ((mcfc &amp; <span class="number">0xFF</span>) &lt;&lt; <span class="number">23</span>) | ((vcfc &amp; <span class="number">0xFF</span>) &lt;&lt; <span class="number">15</span>)</span><br><span class="line">    v |= (<span class="number">0b11</span> &lt;&lt; <span class="number">11</span>)                              <span class="comment"># 二级头/同步/包序=0, 段长ID=11, 指针=0</span></span><br><span class="line">    frame = v.to_bytes(<span class="number">6</span>, <span class="string">&#x27;big&#x27;</span>) + data + ocf</span><br><span class="line">    <span class="keyword">return</span> frame + crc16_ccsds(frame).to_bytes(<span class="number">2</span>, <span class="string">&#x27;big&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- 下行VCDU/CADU ----------</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">make_vcidu</span>(<span class="params">scid, vcid, vcfc, insert, data, ocf</span>):</span><br><span class="line">    hdr = <span class="built_in">bytearray</span>()</span><br><span class="line">    hdr += ((<span class="number">0b01</span> &lt;&lt; <span class="number">14</span>) | (scid &lt;&lt; <span class="number">6</span>) | vcid).to_bytes(<span class="number">2</span>, <span class="string">&#x27;big&#x27;</span>)  <span class="comment"># 版本01+SCID8+VCID6</span></span><br><span class="line">    hdr += vcfc.to_bytes(<span class="number">3</span>, <span class="string">&#x27;big&#x27;</span>)                 <span class="comment"># VC帧计数24bit</span></span><br><span class="line">    hdr += <span class="string">b&#x27;\x40\x00\x00&#x27;</span>                         <span class="comment"># 信令域 + FHEC(演示置0)</span></span><br><span class="line">    v = <span class="built_in">bytes</span>(hdr) + insert + data + ocf</span><br><span class="line">    <span class="keyword">return</span> v + crc16_ccsds(v).to_bytes(<span class="number">2</span>, <span class="string">&#x27;big&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment"># ---------- 演示 ----------</span></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">&#x27;__main__&#x27;</span>:</span><br><span class="line">    <span class="keyword">assert</span> crc16_ccsds(<span class="string">b&#x27;123456789&#x27;</span>) == <span class="number">0x29B1</span>     <span class="comment"># CRC自检</span></span><br><span class="line">    <span class="keyword">assert</span> pack_bits(prbs(TC_TAPS, <span class="number">40</span>)) == <span class="built_in">bytes</span>.fromhex(<span class="string">&#x27;FF399E5A68&#x27;</span>)</span><br><span class="line">    <span class="keyword">assert</span> pack_bits(prbs(TM_TAPS, <span class="number">40</span>)) == <span class="built_in">bytes</span>.fromhex(<span class="string">&#x27;FF480EC09A&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    payload = <span class="string">b&#x27;GJB1198.7A-DEMO&#x27;</span> + <span class="string">b&#x27;\x00&#x27;</span> * <span class="number">27</span>    <span class="comment"># 42字节指令数据</span></span><br><span class="line">    pkt   = make_space_packet(apid=<span class="number">0x64</span>, seq_count=<span class="number">0</span>, payload=payload)</span><br><span class="line">    frame = make_tc_frame(scid=<span class="number">42</span>, vcid=<span class="number">0</span>, seq_no=<span class="number">1</span>, data=pkt)</span><br><span class="line">    cltu  = make_cltu(scramble_bits(bits_of(frame), TC_TAPS), TC_TAPS)</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&#x27;[1] 遥控包 (%dB): %s&#x27;</span> % (<span class="built_in">len</span>(pkt), hexdump(pkt)))</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&#x27;[2] TC帧+FECTF (%dB): %s&#x27;</span> % (<span class="built_in">len</span>(frame), hexdump(frame)))</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&#x27;[3] CLTU (%dB): %s&#x27;</span> % (<span class="built_in">len</span>(cltu), hexdump(cltu, <span class="number">12</span>)))</span><br><span class="line"></span><br><span class="line">    rx = parse_cltu(cltu, TC_TAPS)                 <span class="comment"># 接收端反向还原</span></span><br><span class="line">    <span class="keyword">assert</span> rx == frame <span class="keyword">and</span> rx[<span class="number">5</span>:-<span class="number">2</span>] == pkt</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&#x27;[4] CLTU反向还原: 码块校验/解扰/FECTF全部通过, 指令数据 =&#x27;</span>, rx[<span class="number">5</span>:-<span class="number">2</span>][<span class="number">6</span>:<span class="number">21</span>])</span><br><span class="line"></span><br><span class="line">    cltw = <span class="built_in">bytes</span>([<span class="number">0x01</span>, <span class="number">0x04</span>, <span class="number">0x00</span>, <span class="number">0x05</span>])         <span class="comment"># CLCW: COP-1, VCID=1, V(R)=5</span></span><br><span class="line">    tm = make_tm_frame(<span class="number">42</span>, <span class="number">1</span>, mcfc=<span class="number">5</span>, vcfc=<span class="number">6</span>, ocf=cltw,</span><br><span class="line">                       data=pkt + <span class="string">b&#x27;\x00&#x27;</span> * (<span class="number">48</span> - <span class="built_in">len</span>(pkt)))</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&#x27;[5] TM帧 (%dB): %s&#x27;</span> % (<span class="built_in">len</span>(tm), hexdump(tm)))</span><br><span class="line"></span><br><span class="line">    vcdu = make_vcidu(<span class="number">42</span>, <span class="number">1</span>, <span class="number">0x000123</span>, <span class="string">b&#x27;\x01\x02\x03\x04&#x27;</span> + <span class="string">b&#x27;\x00&#x27;</span> * <span class="number">42</span>,</span><br><span class="line">                      pkt + <span class="string">b&#x27;\x00&#x27;</span> * (<span class="number">448</span> - <span class="built_in">len</span>(pkt)), cltw)</span><br><span class="line">    cadu = <span class="built_in">bytes</span>.fromhex(<span class="string">&#x27;1ACFFC1D&#x27;</span>) + pack_bits(scramble_bits(bits_of(vcdu), TM_TAPS))</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&#x27;[6] VCDU (%dB): %s&#x27;</span> % (<span class="built_in">len</span>(vcdu), hexdump(vcdu, <span class="number">12</span>)))</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&#x27;[7] CADU (%dB): %s&#x27;</span> % (<span class="built_in">len</span>(cadu), hexdump(cadu, <span class="number">12</span>)))</span><br></pre></td></tr></table></figure>
+
+<p>跑出来是这样：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">[1] 遥控包 (48B): 00 64 C0 00 00 2F 47 4A 42 31 31 39 38 2E 37 41  ...</span><br><span class="line">[2] TC帧+FECTF (55B): 00 2A 00 36 01 00 64 C0 00 00 2F 47 4A 42 31 31  ...</span><br><span class="line">[3] CLTU (74B): EB 90 FF 13 9E 6C 69 E9 62 08 35 6C  ...</span><br><span class="line">[4] CLTU反向还原: 码块校验/解扰/FECTF全部通过, 指令数据 = b&#x27;GJB1198.7A-DEMO&#x27;</span><br><span class="line">[5] TM帧 (60B): 0A 81 82 83 18 00 00 64 C0 00 00 2F 47 4A 42 31  ...</span><br><span class="line">[6] VCDU (508B): 4A 81 00 01 23 40 00 00 01 02 03 04  ...</span><br><span class="line">[7] CADU (512B): 1A CF FC 1D B5 C9 0E C1 B9 4D 70 BC  ...</span><br></pre></td></tr></table></figure>
+
+<p>对着看几处：</p>
+<p>[1] 包头 <code>00 64</code> 是 APID&#x3D;0x64，版本类型全 0；<code>C0 00</code> 是序列标志 <code>11</code> 加计数 0；<code>00 2F</code> &#x3D; 47 &#x3D; 48−1。后面就是明文的 GJB1198.7A-DEMO。</p>
+<p>[2] 帧头 <code>00 2A 00 36 01</code>，SCID&#x3D;42、帧长域 54（55−1）、N(S)&#x3D;1。</p>
+<p>[3] CLTU 开头 <code>EB 90</code>，55 字节帧 440 bit 补到 448，切 8 块，16+512+64 &#x3D; 592 bit &#x3D; 74 字节，正好整字节。</p>
+<p>[4] 这行是我最满意的——把 CLTU 当成收到的未知数据解回去，起始结尾序列、8 个码块校验、解扰、CRC 全过，还原出的帧和发射端逐字节一样。</p>
+<p>[5] TM帧头 <code>0A 81 82 83 18 00</code>：前两字节是版本+SCID 42+VCID 1，<code>82 83</code> 拆开是 OCF 标志加两个帧计数，<code>18</code> 里藏着段长 ID <code>11</code> 和指针高位，最后 <code>00</code> 是指针低位。总共 6+48+4+2 &#x3D; 60 字节。</p>
+<p>[7] 前 4 字节 <code>1A CF FC 1D</code> 是 ASM，后面 <code>B5 C9...</code> 开始是扰码数据，不知道多项式就是一坨乱码，知道也就一行 XOR 的事。</p>
+<h2 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h2><p>参数核对过的标准原文：</p>
+<ul>
+<li>GJB 1198.7A-2004《航天器测控和数据管理 第7部分：分包遥控》（<a target="_blank" rel="noopener" href="https://img.antpedia.com/standard/files/pdfs_ora/CN-GJB-K/4a5/GJB%201198.7A-2004_8085.pdf">公开扫描件</a>）</li>
+<li>GJB 1198.6A《航天器测控和数据管理 第6部分：分包遥测》</li>
+<li><a target="_blank" rel="noopener" href="https://ccsds.org/Pubs/232x0b3s.pdf">CCSDS 232.0-B-3</a> TC Space Data Link Protocol —— 遥控帧主导头、FECTF、控制命令、CLCW</li>
+<li><a target="_blank" rel="noopener" href="https://ccsds.org/Pubs/202x0b2s.pdf">CCSDS 202.0-B-2</a> TC Data Routing Service —— GJB同代老标准，帧头&#x2F;UNLOCK&#x2F;SET V(R)&#x2F;帧型组合表</li>
+<li><a target="_blank" rel="noopener" href="https://ccsds.org/Pubs/231x0b3s.pdf">CCSDS 231.0-B-3</a> TC Synchronization and Channel Coding —— BCH码块、CLTU、加扰器、序列参考值</li>
+<li><a target="_blank" rel="noopener" href="https://ccsds.org/Pubs/132x0b2s.pdf">CCSDS 132.0-B-2</a> TM Space Data Link Protocol —— TM帧主导头、首导头指针</li>
+<li><a target="_blank" rel="noopener" href="https://ccsds.org/Pubs/732x0b4.pdf">CCSDS 732.0-B-4</a> AOS Space Data Link Protocol —— VCDU主导头、信令域、FHEC、M_PDU</li>
+<li><a target="_blank" rel="noopener" href="https://ccsds.org/Pubs/131x0b4s.pdf">CCSDS 131.0-B-4</a> TM Synchronization and Channel Coding —— 下行加扰、ASM规则</li>
+</ul>
+<p>想继续挖的话，这几个开源项目值得翻：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://github.com/daniestevez/gr-satellites">gr-satellites</a>，GNU Radio 卫星解码全家桶，几百颗在轨卫星的帧格式都有</li>
+<li><a target="_blank" rel="noopener" href="https://github.com/us-irs/spacepackets">spacepackets</a>，CCSDS 包&#x2F;帧的 Rust+Python 实现</li>
+<li><a target="_blank" rel="noopener" href="https://github.com/yamcs/yamcs">Yamcs</a>，开源任务控制框架，TC&#x2F;TM 处理逻辑可以直接读源码</li>
+</ul>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://woye969.github.io">Ro0t</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://woye969.github.io/2026/10/27/%E5%88%9D%E6%8E%A2%E5%8D%AB%E6%98%9F%E6%B5%8B%E6%8E%A7%E5%B8%A7%EF%BC%9AGJB1198%E9%81%A5%E6%8E%A7%E5%B8%A7%E5%88%B6%E4%BD%9C%E4%B8%8E%E9%81%A5%E6%B5%8B%E5%B8%A7%E7%BB%93%E6%9E%84/">https://woye969.github.io/2026/10/27/%E5%88%9D%E6%8E%A2%E5%8D%AB%E6%98%9F%E6%B5%8B%E6%8E%A7%E5%B8%A7%EF%BC%9AGJB1198%E9%81%A5%E6%8E%A7%E5%B8%A7%E5%88%B6%E4%BD%9C%E4%B8%8E%E9%81%A5%E6%B5%8B%E5%B8%A7%E7%BB%93%E6%9E%84/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://woye969.github.io" target="_blank">Ro0t's Blog</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E5%8D%8F%E8%AE%AE%E5%88%86%E6%9E%90/">协议分析</a><a class="post-meta__tags" href="/tags/%E5%A4%AA%E7%A9%BA%E5%AE%89%E5%85%A8/">太空安全</a><a class="post-meta__tags" href="/tags/%E5%8D%AB%E6%98%9F/">卫星</a><a class="post-meta__tags" href="/tags/CCSDS/">CCSDS</a></div><div class="post-share"><div class="social-share" data-image="/img/famicom-cover.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/" title="把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱"><img class="cover" src="/img/famicom-cover.png" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱</div></div><div class="info-2"><div class="info-item-1">UPX 是个压缩器，不是加密壳，更不是虚拟机。它把整个程序压成一坨数据，再附上一段会把自己解压出来的代码。程序启动时先跑这段代码，解压完、把导入表填好，再跳回原来的入口。upx -d 能一键还原，是因为它读文件里留下的一张 32 字节的头，不是因为它会把程序跑一遍。 魔改 UPX 的人改的就是这两样东西：要么改那张头，让 upx -d 不认；要么在解压代码前面再塞一层，让磁盘上的数据和运行时看到的数据不一样。看懂正常的 UPX 长...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/" title="某招聘软件 13.160 版本协议逆向分析"><img class="cover" src="/img/famicom-cover.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-10-17</div><div class="info-item-2">某招聘软件 13.160 版本协议逆向分析</div></div><div class="info-2"><div class="info-item-1"> 仅供学习交流与技术研讨，请勿用于任何未授权用途。文中敏感信息（手机号、令牌、设备指纹、密钥中段）均已脱敏；App 名称、包名、类名、域名均已化名。请遵守《网络安全法》及相关服务条款。  前言第一次逆向国内的app，只敢逆个登录学习一下，如果app的开发者觉得有侵权请联系作者删除 目标是某主流求职 App（下称 TApp）。本文是Ro0t对其 Android 端 13.160 版本通信协议的完整逆向过程：从拆包、定位签名链路、啃 ...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Ro0t</div><div class="author-info-description">专注二进制安全、逆向分析与漏洞利用</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">12</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">13</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">2</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/woye969" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">这是Ro0t的博客，尽量会给师傅们更新一些有趣的网安知识，不定时更新。喜欢我的blog的点点赞❤</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%B5%B7%E5%9B%A0"><span class="toc-number">1.</span> <span class="toc-text">起因</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81%E5%85%88%E7%9C%8B%E5%85%A8%E5%B1%80"><span class="toc-number">2.</span> <span class="toc-text">一、先看全局</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81%E9%81%A5%E6%8E%A7%E5%B8%A7%E9%95%BF%E4%BB%80%E4%B9%88%E6%A0%B7"><span class="toc-number">3.</span> <span class="toc-text">二、遥控帧长什么样</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8C%85%E5%A4%B4"><span class="toc-number">3.1.</span> <span class="toc-text">包头</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%B8%A7%E4%B8%BB%E5%AF%BC%E5%A4%B4"><span class="toc-number">3.2.</span> <span class="toc-text">帧主导头</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%95%B0%E6%8D%AE%E5%9F%9F%E9%87%8C%E8%A3%85%E4%BB%80%E4%B9%88"><span class="toc-number">3.3.</span> <span class="toc-text">数据域里装什么</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%B8%A7%E5%B0%BE%E7%9A%84CRC"><span class="toc-number">3.4.</span> <span class="toc-text">帧尾的CRC</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81%E5%8A%A0%E6%89%B0"><span class="toc-number">4.</span> <span class="toc-text">三、加扰</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81BCH%E5%92%8CCLTU"><span class="toc-number">5.</span> <span class="toc-text">四、BCH和CLTU</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81%E6%96%B0%E6%97%A7%E7%89%88%E6%9C%AC%E7%9A%84%E5%9D%91"><span class="toc-number">6.</span> <span class="toc-text">五、新旧版本的坑</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%AD%E3%80%81%E6%8C%87%E4%BB%A4%E7%9A%84%E9%97%AE%E9%A2%98"><span class="toc-number">7.</span> <span class="toc-text">六、指令的问题</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8C%87%E4%BB%A4%E5%88%86%E4%B8%A4%E7%B1%BB"><span class="toc-number">7.1.</span> <span class="toc-text">指令分两类</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%B8%A7%E7%9A%84%E5%9B%9B%E7%A7%8D%E5%BD%A2%E6%80%81"><span class="toc-number">7.2.</span> <span class="toc-text">帧的四种形态</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#UNLOCK-%E5%92%8C-SET-V-R"><span class="toc-number">7.3.</span> <span class="toc-text">UNLOCK 和 SET V(R)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%89%E7%B1%BB%E6%93%8D%E4%BD%9C%E5%92%8C%E5%8A%A0%E6%80%A5"><span class="toc-number">7.4.</span> <span class="toc-text">三类操作和加急</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#COP-1%EF%BC%9A%E9%97%AD%E7%8E%AF%E5%9C%A8%E5%93%AA"><span class="toc-number">7.5.</span> <span class="toc-text">COP-1：闭环在哪</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%83%E3%80%81%E9%81%A5%E6%B5%8B%E8%BF%99%E8%BE%B9"><span class="toc-number">8.</span> <span class="toc-text">七、遥测这边</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%81%A5%E6%B5%8B%E5%8C%85"><span class="toc-number">8.1.</span> <span class="toc-text">遥测包</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#TM%E4%BC%A0%E8%BE%93%E5%B8%A7"><span class="toc-number">8.2.</span> <span class="toc-text">TM传输帧</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#VCDU%E5%92%8CCADU"><span class="toc-number">8.3.</span> <span class="toc-text">VCDU和CADU</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#TM%E5%B8%A7%E5%92%8CVCDU%E4%BB%80%E4%B9%88%E5%85%B3%E7%B3%BB"><span class="toc-number">8.4.</span> <span class="toc-text">TM帧和VCDU什么关系</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%AB%E3%80%81%E9%80%86%E5%90%91%EF%BC%9A%E6%8A%8A%E7%A0%81%E6%B5%81%E8%A7%A3%E5%9B%9E%E5%8E%BB"><span class="toc-number">9.</span> <span class="toc-text">八、逆向：把码流解回去</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B9%9D%E3%80%81%E5%AE%8C%E6%95%B4%E4%BB%A3%E7%A0%81%E4%B8%8E%E8%BF%90%E8%A1%8C%E7%BB%93%E6%9E%9C"><span class="toc-number">10.</span> <span class="toc-text">九、完整代码与运行结果</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8F%82%E8%80%83"><span class="toc-number">11.</span> <span class="toc-text">参考</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/10/27/%E5%88%9D%E6%8E%A2%E5%8D%AB%E6%98%9F%E6%B5%8B%E6%8E%A7%E5%B8%A7%EF%BC%9AGJB1198%E9%81%A5%E6%8E%A7%E5%B8%A7%E5%88%B6%E4%BD%9C%E4%B8%8E%E9%81%A5%E6%B5%8B%E5%B8%A7%E7%BB%93%E6%9E%84/" title="初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构"/></a><div class="content"><a class="title" href="/2026/10/27/%E5%88%9D%E6%8E%A2%E5%8D%AB%E6%98%9F%E6%B5%8B%E6%8E%A7%E5%B8%A7%EF%BC%9AGJB1198%E9%81%A5%E6%8E%A7%E5%B8%A7%E5%88%B6%E4%BD%9C%E4%B8%8E%E9%81%A5%E6%B5%8B%E5%B8%A7%E7%BB%93%E6%9E%84/" title="初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构">初探卫星测控帧：GJB1198遥控帧制作与遥测帧结构</a><time datetime="2026-10-27T12:00:00.000Z" title="发表于 2026-10-27 20:00:00">2026-10-27</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/" title="把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱"/></a><div class="content"><a class="title" href="/2026/10/20/upx-unpack-%E5%8E%9F%E7%90%86%E4%B8%8E%E9%AD%94%E6%94%B9/" title="把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱">把 UPX 拆开：它怎么跑，魔改改哪里，脱壳怎么脱</a><time datetime="2026-10-19T19:10:00.000Z" title="发表于 2026-10-20 03:10:00">2026-10-20</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/19/ollvm-deobfuscation-Oo0l1IVvMm/" title="从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生"/></a><div class="content"><a class="title" href="/2026/10/19/ollvm-deobfuscation-Oo0l1IVvMm/" title="从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生">从 F5 按不下去说起：OLLVM 三板斧、jmp reg 地狱，和一个反混淆插件的诞生</a><time datetime="2026-10-18T16:00:00.000Z" title="发表于 2026-10-19 00:00:00">2026-10-19</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/" title="某招聘软件 13.160 版本协议逆向分析"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="某招聘软件 13.160 版本协议逆向分析"/></a><div class="content"><a class="title" href="/2026/10/17/%E6%9F%90%E6%8B%9B%E8%81%98%E8%BD%AF%E4%BB%B6-13-160-%E7%89%88%E6%9C%AC%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/" title="某招聘软件 13.160 版本协议逆向分析">某招聘软件 13.160 版本协议逆向分析</a><time datetime="2026-10-16T16:00:00.000Z" title="发表于 2026-10-17 00:00:00">2026-10-17</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="NepCTF2026 ColorfulArray"/></a><div class="content"><a class="title" href="/2026/10/16/NepCTF2026-ColorfulArray/" title="NepCTF2026 ColorfulArray">NepCTF2026 ColorfulArray</a><time datetime="2026-10-15T18:50:00.000Z" title="发表于 2026-10-16 02:50:00">2026-10-16</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Ro0t</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div><div class="footer_custom_text">Ro0t · Binary Security Blog</div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script defer src="/js/kof-pet.js?v=mai2"></script><script defer src="/js/like.js?v=1"></script></div></body></html>
