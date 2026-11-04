@@ -1,0 +1,313 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>初探内网渗透：从一个 .git 泄露打到内网最深处 | Ro0t's Blog</title><meta name="author" content="Ro0t"><meta name="copyright" content="Ro0t"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="一次自建靶场的完整内网渗透复盘：.git 泄露还原源码、路径穿越升 RCE、Nacos JRaft 反序列化注入内存马（公开工具打不通的排查实录）、特权容器逃逸、制品库密码生成器、垂直越权与 SSO 信任链，十个 flag 全收。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="初探内网渗透：从一个 .git 泄露打到内网最深处">
+<meta property="og:url" content="https://woye969.github.io/2026/11/04/%E5%88%9D%E6%8E%A2%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F%EF%BC%9A%E4%BB%8E%E4%B8%80%E4%B8%AA.git%E6%B3%84%E9%9C%B2%E6%89%93%E5%88%B0%E5%86%85%E7%BD%91%E6%9C%80%E6%B7%B1%E5%A4%84/index.html">
+<meta property="og:site_name" content="Ro0t&#39;s Blog">
+<meta property="og:description" content="一次自建靶场的完整内网渗透复盘：.git 泄露还原源码、路径穿越升 RCE、Nacos JRaft 反序列化注入内存马（公开工具打不通的排查实录）、特权容器逃逸、制品库密码生成器、垂直越权与 SSO 信任链，十个 flag 全收。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://woye969.github.io/img/famicom-cover.png">
+<meta property="article:published_time" content="2026-11-04T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-11-04T14:48:50.403Z">
+<meta property="article:author" content="Ro0t">
+<meta property="article:tag" content="Java反序列化">
+<meta property="article:tag" content="SSO">
+<meta property="article:tag" content="Web安全">
+<meta property="article:tag" content="内网渗透">
+<meta property="article:tag" content="容器逃逸">
+<meta property="article:tag" content="越权">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://woye969.github.io/img/famicom-cover.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "初探内网渗透：从一个 .git 泄露打到内网最深处",
+  "url": "https://woye969.github.io/2026/11/04/%E5%88%9D%E6%8E%A2%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F%EF%BC%9A%E4%BB%8E%E4%B8%80%E4%B8%AA.git%E6%B3%84%E9%9C%B2%E6%89%93%E5%88%B0%E5%86%85%E7%BD%91%E6%9C%80%E6%B7%B1%E5%A4%84/",
+  "image": "https://woye969.github.io/img/famicom-cover.png",
+  "datePublished": "2026-11-04T12:00:00.000Z",
+  "dateModified": "2026-11-04T14:48:50.403Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ro0t",
+      "url": "https://woye969.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon-pixel.png"><link rel="canonical" href="https://woye969.github.io/2026/11/04/%E5%88%9D%E6%8E%A2%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F%EF%BC%9A%E4%BB%8E%E4%B8%80%E4%B8%AA.git%E6%B3%84%E9%9C%B2%E6%89%93%E5%88%B0%E5%86%85%E7%BD%91%E6%9C%80%E6%B7%B1%E5%A4%84/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          const mediaQueryDark = window.matchMedia('(prefers-color-scheme: dark)')
+          const mediaQueryLight = window.matchMedia('(prefers-color-scheme: light)')
+
+          if (theme === undefined) {
+            if (mediaQueryLight.matches) activateLightMode()
+            else if (mediaQueryDark.matches) activateDarkMode()
+            else {
+              const hour = new Date().getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            mediaQueryDark.addEventListener('change', () => {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else {
+            theme === 'light' ? activateLightMode() : activateDarkMode()
+          }
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '初探内网渗透：从一个 .git 泄露打到内网最深处',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/pixel.css?v=mobilefix"><meta name="generator" content="Hexo 8.1.1"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">17</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">25</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/famicom-cover.png);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Ro0t's Blog</span></a><a class="nav-page-title" href="/"><span class="site-name">初探内网渗透：从一个 .git 泄露打到内网最深处</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comment-dots"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-user"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">初探内网渗透：从一个 .git 泄露打到内网最深处</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-11-04T12:00:00.000Z" title="发表于 2026-11-04 20:00:00">2026-11-04</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-11-04T14:48:50.403Z" title="更新于 2026-11-04 22:48:50">2026-11-04</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E6%B8%97%E9%80%8F/">渗透</a></span></div><div class="meta-secondline"></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h1 id="初探内网渗透：从一个-git-泄露打到内网最深处"><a href="#初探内网渗透：从一个-git-泄露打到内网最深处" class="headerlink" title="初探内网渗透：从一个 .git 泄露打到内网最深处"></a>初探内网渗透：从一个 .git 泄露打到内网最深处</h1><p>最近在补内网渗透这块的知识，光看文章不过瘾，就找了个模拟企业内网的环境练手。整个环境是这么搭的：对外只暴露一个公司官网，后面藏着一套典型的微服务全家桶——配置中心、制品库、业务服务器、SSO 单点登录、代码仓库，一共埋了十个 flag，目标很纯粹：从那个官网进去，把内网翻个底朝天。</p>
+<p>断断续续打了两天，中间有快一个小时卡在一个反序列化利用上动弹不得，最后那段的排查过程反而成了这次收获最大的部分。把完整的思路和踩的坑都记下来。</p>
+<p>（文中公网 IP 打了码，flag 只留前几位；环境是自建靶场，仅供学习记录。过程一半在浏览器里确认页面变化，一半在终端里发请求，配图是我自己复现时截的，边打边补。）</p>
+<h2 id="前置知识"><a href="#前置知识" class="headerlink" title="前置知识"></a>前置知识</h2><p>后面会反复用到的概念，先在开头铺一遍，只讲”是什么、为什么能被利用”，细节都在正文对应的位置。都熟的话直接跳过这节。</p>
+<p><strong>.git 泄露</strong>：网站用 git 管理源码时，项目根目录会有个 <code>.git/</code> 目录，存着全部源码和提交历史。它一旦能通过 HTTP 访问，就等于源码公开。git 把每个文件按内容哈希存成 <code>objects/ab/cdef...</code> 形式的压缩对象，只要拿到 commit 哈希就能递归还原出整个仓库。</p>
+<p><strong>路径穿越</strong>：程序把用户输入拼进文件路径时（比如 <code>path.join(目录, 文件名)</code>），输入里的 <code>../</code> 会让保存位置跳出预定目录。本质是”字符串拼接”和”路径语义”之间的缝隙。</p>
+<p><strong>SSTI &#x2F; 模板注入</strong>：Web 模板引擎（本文是 Node 的 EJS）的工作方式是把模板文件<strong>编译成代码再执行</strong>，<code>&lt;%- 表达式 %&gt;</code> 里包的不是要显示的文本，而是要运行的 JS。所以”能控制模板文件的内容”，约等于”能在服务器上执行代码”。</p>
+<p><strong>Java 反序列化</strong>：Java 序列化字节流里写着对象的类名，反序列化时服务端照着类名实例化对象。如果没有类白名单，攻击者可以投递构造好的”对象链”（gadget chain）：实例化过程中自动触发的方法一环扣一环，最终走到 <code>Runtime.exec()</code> 执行命令。Hessian 是其中一种二进制序列化协议，有自己的一套 gadget 生态。</p>
+<p><strong>内存马</strong>：不落地的 webshell。传统 webshell 是一个文件，删文件就除马；内存马把恶意逻辑注册进应用的运行时（比如 Java Web 的 Filter 链），只存在于进程内存里，没有文件可删，进程不死马就不死。</p>
+<p><strong>特权容器与逃逸</strong>：容器靠 namespace 和 capabilities 做隔离，普通容器里的 root 是”阉割版”；<code>privileged</code> 模式什么都不裁剪，宿主的磁盘设备直接可见——把宿主分区挂载进来就能读宿主文件，这是最朴素的文件级逃逸。</p>
+<p><strong>垂直越权</strong>：认证回答”你是谁”，授权回答”你能干什么”。接口只校验了登录态、没校验”这条数据是不是你的”，低权用户改个参数就能干高权角色的事。</p>
+<p><strong>SSO 与反向代理认证</strong>：单点登录让”在一处登录，处处免登”。常见实现是身份源登录后 302 跳到目标系统，URL 上带着身份信息；目标系统前面的反向代理校验后把身份写进请求头，后端应用无条件信任这个头——头里写谁，你就是谁。</p>
+<h2 id="第一步：信息搜集，先别急着扫"><a href="#第一步：信息搜集，先别急着扫" class="headerlink" title="第一步：信息搜集，先别急着扫"></a>第一步：信息搜集，先别急着扫</h2><p>拿到一个网站，我现在的习惯是先别上来就扫目录。先把页面从头到尾看一遍——三个页面（首页&#x2F;产品&#x2F;关于）全是静态内容，前端 JS 也就是些滚动动画，没有任何攻击面。倒是 404 页面文案有点意思：「请求的资源未找到<strong>或尚未授权访问</strong>」，暗示存在隐藏端点。</p>
+<p>然后再上目录字典扫。字典里我专门放了 <code>.git/HEAD</code> 这种”标准探针”——如果网站用 git 管理代码又没把 <code>.git</code> 目录排除在 Web 根之外，这个路径会返回 200。扫完就命中了两个：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">.git/HEAD      200</span><br><span class="line">.git/config    200</span><br></pre></td></tr></table></figure>
+
+<p><code>curl /robots.txt</code> 返回的也是那个 404 页面，说明服务器对不存在路径统一回 404 页，判断存在与否只能靠状态码和长度。</p>
+<p>浏览器里看一眼这个 404 页，文案里那句「或尚未授权访问」在我当时看来基本就是明示了。</p>
+<h2 id="第二步：手写-dumper-还原源码"><a href="#第二步：手写-dumper-还原源码" class="headerlink" title="第二步：手写 dumper 还原源码"></a>第二步：手写 dumper 还原源码</h2><p><code>.git/HEAD</code> 返回 <code>ref: refs/heads/master</code>，但去拉 <code>refs/heads/master</code> 却是 404——loose ref 文件不在。这时候很多人就卡住了，其实还有一条路：<code>.git/logs/HEAD</code>（reflog），里面记录了每一次 commit 的完整哈希：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">0000000000000000000000000000000000000000 801a6c9669561ac3... commit (initial): init: company website v1.0.0</span><br></pre></td></tr></table></figure>
+
+<p>拿到 commit 哈希，剩下的就是纯体力活。git 的对象存储结构是 <code>objects/</code>&lt;哈希前两位&gt;&#x2F;&lt;余下 38 位&gt;&#96;&#96;，内容 zlib 压缩，解压后开头是类型标记（commit&#x2F;tree&#x2F;blob）。commit 对象里写着根 tree 的哈希，tree 对象里是一堆「模式 + 文件名 + 子对象哈希」的三元组，递归拉下来就能把整个仓库还原。</p>
+<p>现成工具（GitHack、git-dumper）当然能用，但我建议自己写一遍，三十几行 Python，写完你对 git 内部结构的理解会上一个台阶。最后还原出 17 个文件：Express 入口、路由、EJS 模板、Dockerfile、docker-compose……</p>
+<h2 id="第三步：审计源码，找「用户输入进危险函数」的点"><a href="#第三步：审计源码，找「用户输入进危险函数」的点" class="headerlink" title="第三步：审计源码，找「用户输入进危险函数」的点"></a>第三步：审计源码，找「用户输入进危险函数」的点</h2><p>源码到手之后不是逐行看，而是带着模式去找。很快在 <code>routes/admin.js</code> 里命中：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> filename = files.<span class="property">logo</span>.<span class="property">name</span>;                  <span class="comment">// formidable 1.2.6, 客户端原始文件名</span></span><br><span class="line"><span class="keyword">const</span> finalPath = path.<span class="title function_">join</span>(uploadDir, filename);  <span class="comment">// ← 这里</span></span><br><span class="line">fs.<span class="title function_">mkdirSync</span>(path.<span class="title function_">dirname</span>(finalPath), &#123; <span class="attr">recursive</span>: <span class="literal">true</span> &#125;);</span><br><span class="line">fs.<span class="title function_">renameSync</span>(files.<span class="property">logo</span>.<span class="property">path</span>, finalPath);</span><br></pre></td></tr></table></figure>
+
+<p><code>files.logo.name</code> 就是 multipart 包里客户端填的原始 filename，formidable 1.2.6 对它不做任何处理。<code>path.join</code> 也不做什么安全检查，只是字符串拼接加规范化——所以 filename 填 <code>../../views/index.ejs</code>，保存路径就穿到了应用目录。</p>
+<p>到这里我有了一个<strong>任意文件写</strong>。但任意文件写本身不等于 RCE，关键问题是：写到哪个文件、怎么让它被执行？</p>
+<p>我一开始的念头是覆盖路由文件，转念一想就否了——<code>require()</code> 在进程启动时已经把 JS 加载进内存，改磁盘文件不重启不生效，而这个环境里我没有重启通道。反过来想：哪些文件是<strong>运行时会被反复读取</strong>的？EJS 模板。EJS 渲染的时候会把模板内容编译成 JS 函数执行，而且每次访问页面都重新读磁盘。所以覆盖 <code>views/index.ejs</code>，访问首页，模板内容就变成了我要执行的代码。</p>
+<p>这就是任意文件写升级成 RCE 的那座桥：<strong>挑运行时会重读的文件下手</strong>。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&lt;pre&gt;&lt;%- process.mainModule.require(&quot;child_process&quot;).execSync(&quot;cat /flag&quot;).toString() %&gt;&lt;/pre&gt;</span><br></pre></td></tr></table></figure>
+
+<p>EJS 模板里拿不到 <code>require</code>，但 <code>process.mainModule.require</code> 可以绕出来。上传这一步在终端里 curl 完成，文件名填 <code>../../views/index.ejs</code>；然后切回浏览器刷新首页，<code>flag{6bfe024f...}</code> 直接渲染在页面上。第一个 flag 到手，同时我也拿到了容器的 root shell——后面所有内网操作都从这个”跳板”发起。</p>
+<p><img src="/img/nkt/blog_01_flag1.png" alt="上传成功后刷新首页，浏览器里直接渲染出 flag"></p>
+<p>整条链一句话概括：通过源码审计找到上传接口，利用文件名未过滤的路径穿越覆盖首页模板（模板注入），实现 RCE，然后回浏览器访问官网确认结果。</p>
+<p>顺带一提，环境还在 <code>.git</code> 里留了个彩蛋：docker-compose 注释里写着第一关容器故意不给特权，逼你往内网走。</p>
+<h2 id="第四步：内网发现，Nacos-弱口令"><a href="#第四步：内网发现，Nacos-弱口令" class="headerlink" title="第四步：内网发现，Nacos 弱口令"></a>第四步：内网发现，Nacos 弱口令</h2><p>在跳板容器里看一眼网卡：只有一张 <code>eth0</code>（172.18.0.2&#x2F;16），没有双网卡。但默认路由指向网关，试了一下直接探内网地址——居然全通。用 node 写了个十几行的 TCP 扫描脚本（容器里没有 nmap，但 node 自带 net 模块够用），把常见段和常见端口扫了一遍：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">10.0.1.20:8848   10.0.1.20:7848    # Nacos</span><br><span class="line">10.0.1.30:8081                     # Nexus</span><br><span class="line">10.0.2.10:22                       # 一台 SSH</span><br><span class="line">10.0.2.20:8080                     # SSO</span><br><span class="line">10.0.3.10:3000                     # Gitea</span><br></pre></td></tr></table></figure>
+
+<p>拓扑出来了，内网里一共五台机器。</p>
+<p>为什么要优先打 Nacos？因为它是<strong>配置中心</strong>——微服务架构下，全公司的数据库密码、API key、业务 secret 都存在这里面。拿到配置中心的读权限，约等于拿到半个内网的凭据本。</p>
+<p>线索文件怎么翻？还记得第一关的结论——想执行什么命令，就把命令写进模板传一次。把模板里的命令换成 <code>cat /app/application.yml</code>，上传，回浏览器刷新首页，一份 YAML 配置直接渲染在页面上：Nacos 的地址和账号密码（<code>nacos/nacos</code>）全在里面。有意思的是文件里写的地址是 <code>10.10.1.20</code>，跟扫出来的 <code>10.0.1.20</code> 差了个网段——线索文件跟实际环境对不上是常态，以扫出来的为准。</p>
+<p><img src="/img/nkt/blog_02_yaml.png" alt="一页式 shell 翻出 application.yml，Nacos 账密直接渲染在首页"></p>
+<p>接下来经跳板打配置中心。10.0.1.20 在内网，我的终端没有路由，要用 pivot 通道——它把刚才手动做的「上传→访问」循环自动化了。先用 yaml 里的账密登录拿 accessToken，再带着 token 读配置项，<code>app.secret</code> 里就是 <code>flag{6ed0ca2...}</code>（flag#2），顺带翻出了 MySQL 的账号密码：</p>
+<p><img src="/img/nkt/blog_02_token.png" alt="pivot 通道登录拿 token，读配置项拿到 flag#2"></p>
+<p>到这里都是常规操作，真正的硬骨头在后面。</p>
+<h2 id="第五步：Jraft-反序列化，卡了我一个小时的地方"><a href="#第五步：Jraft-反序列化，卡了我一个小时的地方" class="headerlink" title="第五步：Jraft 反序列化，卡了我一个小时的地方"></a>第五步：Jraft 反序列化，卡了我一个小时的地方</h2><p>Nacos 2.x 的集群节点之间用 JRaft 协议同步数据，端口 7848。这个端口的 <code>WriteRequest.data</code> 字段用 Hessian 反序列化，而 2.2.0 版本没有类白名单——标准的 Java 反序列化利用面：字节流里写着类名，服务端照着实例化，配合 gadget 链最终走到 <code>Runtime.exec</code>。</p>
+<p>GitHub 上有现成的利用工具（NacosRce），下载回来，按 README 跑——</p>
+<p><strong>没有任何反应。</strong> 服务端返回的错误永远是同一句：<code>No enum constant com.alibaba.nacos.consistency.DataOperation.</code></p>
+<p>这时候排查思路很重要，我按顺序排了三种可能：</p>
+<p><strong>第一，是不是我参数写错了？</strong> 把三种参数格式都试了一遍，错误一模一样。排除。</p>
+<p><strong>第二，是不是工具和目标环境不兼容（JDK 版本、Hessian 版本）？</strong> 这个没法凭空猜，得搭本地复现。我在跳板容器里装了 JDK 8，把工具 jar 拿 CFR 反编译，看它到底怎么构造 payload——工具内置了 payload 生成类（<code>HessianPayload</code>），我直接调它的方法生成 payload 字节，再用和目标一样的 Hessian 版本（4.0.63）在本地反序列化。<strong>本地完美触发</strong>：Xalan 的 <code>Process._main</code> 被调起，<code>Runtime.exec</code> 执行了我预置的命令。说明 payload 本身没问题。</p>
+<p><strong>第三，那就是目标的执行流程跟我以为的不一样。</strong> 这一步用了个很有效的技巧：<strong>差分探针</strong>。给目标发四组内容完全不同的请求——纯字符串、一个目标上根本不存在的类、gadget 本体——如果目标真的走到了反序列化，这几组的报错应该各不相同；结果四组的响应一字不差。结论：执行根本没走到反序列化，在更早的地方被拦下来了。</p>
+<p>回头拉 Nacos 2.2.0 的源码对顺序，一眼看穿：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 我以为的顺序（旧版）:</span></span><br><span class="line"><span class="type">MetadataOperation</span> <span class="variable">op</span> <span class="operator">=</span> serializer.deserialize(request.getData()...);  <span class="comment">// 先反序列化</span></span><br><span class="line"><span class="keyword">switch</span> (DataOperation.valueOf(request.getOperation())) &#123; ... &#125;        <span class="comment">// 后校验</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 这个部署的实际顺序: 校验被挪到了前面</span></span><br></pre></td></tr></table></figure>
+
+<p>而工具<strong>从来不设置 <code>operation</code> 字段</strong>，空字符串传给 <code>valueOf</code> 必然抛异常——请求死在了门口，反序列化压根没执行。这个部署把校验前置了（相当于是修过的版本），公开工具自然失灵。</p>
+<p>修法反而简单：自己写客户端，复用工具 jar 里的 payload 构造类，给 <code>WriteRequest</code> 补上 <code>setOperation(&quot;ADD&quot;)</code>：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">WriteRequest.newBuilder()</span><br><span class="line">    .setGroup(<span class="string">&quot;naming_instance_metadata&quot;</span>)   <span class="comment">// 组名也有讲究，后面说</span></span><br><span class="line">    .setOperation(<span class="string">&quot;ADD&quot;</span>)                    <span class="comment">// ★ 补上工具漏掉的校验字段</span></span><br><span class="line">    .setData(ByteString.copyFrom(payload)).build();</span><br></pre></td></tr></table></figure>
+
+<p>发出去，服务端返回 <code>NullPointerException</code>——这不是失败，对照源码看，反序列化已经完整执行完（内存马已注入），是后面处理空元数据时才炸的。<strong>能炸在反序列化之后，就说明前面的利用已经生效了。</strong></p>
+<p>中间还有个插曲：我一开始用的组是 <code>naming_service_metadata</code>，打完一个空元数据请求之后这个组直接进了 leaderless 状态，后续请求全部返回 <code>Could not find leader</code>，再也没恢复过。换 <code>naming_instance_metadata</code> 组就正常了。所以如果你复现到这一步，<strong>组名选 <code>naming_instance_metadata</code> 首发更稳</strong>。</p>
+<p>内存马注入成功后，通过特定的请求头就能执行任意命令（触发路径是 <code>/nacos/</code>，打根路径 <code>/</code> 是 404，这个细节工具文档里没写，全靠试）。这种 Filter 型内存马没有落地文件，直接驻留在进程里，声明重启都存活——所以过了很久回头触发一次 <code>cat /flag</code>，flag#3 照样出来：</p>
+<p><img src="/img/nkt/blog_03_memshell.png" alt="触发驻留内存马，root 身份读出 flag#3"></p>
+<p>flag#3（<code>flag{4e081458...}</code>）到手，同时拿到了 Nacos 容器的 root shell。</p>
+<p>这一段排查下来，我总结出一个套路，以后遇到”公开工具打不通”都适用：</p>
+<ol>
+<li>先排除自己参数问题（多试几种格式）；</li>
+<li><strong>本地 1:1 复现</strong>——同版本 JDK、同版本依赖库，本地能触发就证明 payload 没毛病，差异在目标；</li>
+<li><strong>差分探针</strong>——发几组”预期报错不同”的请求，如果响应一模一样，说明执行在更早的地方短路了；</li>
+<li>回去读目标版本的源码对执行顺序；</li>
+<li>补上工具没做的部分。</li>
+</ol>
+<h2 id="第六步：特权容器逃逸"><a href="#第六步：特权容器逃逸" class="headerlink" title="第六步：特权容器逃逸"></a>第六步：特权容器逃逸</h2><p>拿到 Nacos 容器的 shell 之后，先给它画像：<code>grep CapEff /proc/1/status</code>，输出 <code>000001ffffffffff</code>——全 f，特权容器，root 的能力没有被裁剪，宿主的块设备直接可见。这种容器谈”逃逸”不用绕，把宿主磁盘挂进来看就完事了。</p>
+<p>一条命令把判断、挂载、读 flag、卸载全串起来（还是经内存马执行，整段都发生在 nacos 容器里）：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">grep CapEff /proc/1/status; <span class="built_in">mkdir</span> -p /mnt/host; mount -t ext4 /dev/vda3 /mnt/host &amp;&amp; <span class="built_in">echo</span> mount-OK; <span class="built_in">cat</span> /mnt/host/flag; <span class="built_in">cat</span> /mnt/host/opt/deploy/fL_AG; umount /mnt/host &amp;&amp; <span class="built_in">echo</span> umount-OK</span><br></pre></td></tr></table></figure>
+
+<p>五个输出逐行都有含义：</p>
+<ol>
+<li><code>CapEff: 000001ffffffffff</code> —— 能力位全开，特权容器实锤；</li>
+<li><code>mount-OK</code> —— 宿主根分区 <code>/dev/vda3</code> 直接以读写方式挂进了容器；</li>
+<li><code>flag{2f4e2e01...}</code> —— 宿主机 <code>/flag</code>（flag#4）；</li>
+<li><code>flag{5f685c76...}</code> —— 宿主机 <code>/opt/deploy/fL_AG</code>（flag#5），文件名故意写成 <code>fL_AG</code>，防的就是 <code>cat /flag*</code> 一把梭；</li>
+<li><code>umount-OK</code> —— 用完卸载，不留痕迹。</li>
+</ol>
+<p><img src="/img/nkt/blog_04_escape.png" alt="一条命令完成特权确认、挂载宿主盘、读双 flag、卸载"></p>
+<p>顺带在宿主机上还能翻到 <code>/opt/deploy/config.txt</code>——Nexus 制品库的账号密码，下一跳的钥匙。</p>
+<h2 id="第七步：制品库里翻出一个”密码生成器”"><a href="#第七步：制品库里翻出一个”密码生成器”" class="headerlink" title="第七步：制品库里翻出一个”密码生成器”"></a>第七步：制品库里翻出一个”密码生成器”</h2><p>Nexus 是公司内部制品仓库。这里有个认知前提：<strong>内网制品库是仅次于配置中心的第二个密码本</strong>——内部工具包里经常有人图省事硬编码凭据逻辑。</p>
+<p>钥匙在上一关就拿到了：逃逸挂载宿主盘时翻到的 <code>config.txt</code>，里面写着 Nexus 的内网地址和账密（那行中文注释在终端里显示成了一串问号，CentOS 的本地化没配，无伤大雅）：</p>
+<p><img src="/img/nkt/blog_05_config.png" alt="信息收集：宿主机 config.txt 里拿到 Nexus 地址和账密"></p>
+<p>然后从制品库拉 jar。10.0.1.30 还是内网，照旧走 pivot 通道：wget 带着 Basic 认证头（<code>admin:admin123</code> 的 Base64）下载制品，<code>sha256sum</code> 校验和仓库元数据一致，说明包没被动过。jar 本质是 zip，<code>unzip</code> 出来直接躺着一个 <code>flag.txt</code>（<code>flag{562736a3...}</code>，flag#6），另有一个 <code>PasswordGenerator.class</code>：</p>
+<p><img src="/img/nkt/blog_05_jar.png" alt="pivot 通道拉 jar，sha256 校验后解出 flag#6"></p>
+<p>用 CFR 反编译看 <code>PasswordGenerator</code> 的逻辑——账号 <code>appuser</code> 是写死的常量，箭头标的就是关键位置：</p>
+<p><img src="/img/nkt/blog_05_decomp.png" alt="CFR 反编译：固定账号与密码生成算法"></p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">static</span> String <span class="title function_">generatePassword</span><span class="params">(String ip, <span class="type">int</span> year)</span> &#123;</span><br><span class="line">    <span class="type">String</span> <span class="variable">seed</span> <span class="operator">=</span> ip.replace(<span class="string">&quot;.&quot;</span>, <span class="string">&quot;&quot;</span>) + year;</span><br><span class="line">    <span class="keyword">return</span> md5(seed).substring(<span class="number">0</span>, <span class="number">16</span>) + <span class="string">&quot;!@#&quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// SERVICE_ACCOUNT = &quot;appuser&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>一台内网服务器的密码是按「IP 去掉点 + 年份」的 MD5 生成的。落到具体数字：目标 IP 是内网扫描确认的 <code>10.0.2.10</code>，去掉点就是 <code>100210</code>；年份环境里没明说，只能枚举——好在 MySQL 密码 <code>Biz@2024!</code>、SSO 密码 <code>user@2024</code> 都带着年份味，先试 2024，seed 就是 <code>1002102024</code>。这里有个观念上的转变：<strong>当密码由可预测算法生成时，这不叫爆破，叫计算</strong>——账号写死，唯一的不确定是年份，候选十几个，每个都能精确算出对应密码，算一次连一次，<code>sshpass</code> 一发入魂。</p>
+<p>动手：本地算出 <code>md5(&quot;1002102024&quot;)</code> 前 16 位，拼上 <code>!@#</code> 当密码，经跳板 <code>sshpass</code> 直连：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">echo</span> -n <span class="string">&quot;1002102024&quot;</span> | <span class="built_in">md5sum</span> | <span class="built_in">cut</span> -c1-16   <span class="comment"># 64a4fc7b8f32bdaf</span></span><br><span class="line">sshpass -p <span class="string">&#x27;64a4fc7b8f32bdaf!@#&#x27;</span> ssh -oStrictHostKeyChecking=no appuser@10.0.2.10   <span class="string">&#x27;cat /etc/flag; grep system.flag /opt/app/config/mail.properties; cat /opt/app/config/sso.properties&#x27;</span></span><br></pre></td></tr></table></figure>
+
+<p><img src="/img/nkt/blog_06_ssh.png" alt="算出密码后 sshpass 一发登录，flag#7&#x2F;#8 与 SSO 凭据同框"></p>
+<p>登录上去翻了 <code>/etc/flag</code>（<code>flag{1fbe9669...}</code>）和应用配置（<code>system.flag = flag{c99e1cf5...}</code>），flag#7、#8 到手，同时在 <code>sso.properties</code> 里翻到了 SSO 平台的普通账号密码（<code>user/user@2024</code>）。又是凭据链：每一关的入口凭据都藏在上一关的文件里。</p>
+<h2 id="第八步：垂直越权，认证不等于授权"><a href="#第八步：垂直越权，认证不等于授权" class="headerlink" title="第八步：垂直越权，认证不等于授权"></a>第八步：垂直越权，认证不等于授权</h2><p>SSO 平台用普通账号登录。这个环节的知识点一句话就能说完：<strong>认证回答”你是谁”，授权回答”你能干什么”，很多应用只做了前者</strong>。</p>
+<p>找接口的方式很朴素：登录后看功能，”修改密码”这类接口十有八九只校验了登录态。抓包看参数——请求体里就一个 <code>userId</code>。把它换成 1（超管），密码改成自己的：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span><span class="attr">&quot;userId&quot;</span><span class="punctuation">:</span> <span class="number">1</span><span class="punctuation">,</span> <span class="attr">&quot;password&quot;</span><span class="punctuation">:</span> <span class="string">&quot;Hacked@2024&quot;</span><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>实际打就是四条 curl：普通账号登录存 cookie → 带着 cookie 请求改密接口 → 用新密码登 system → 读 profile：</p>
+<p><img src="/img/nkt/blog_07_idor.png" alt="登录、越权改密、登超管、读 profile，四步同框"></p>
+<p>响应 <code>{&quot;ok&quot;:true,&quot;msg&quot;:&quot;修改成功&quot;,&quot;userId&quot;:1,&quot;username&quot;:&quot;system&quot;}</code>，然后走正常登录入口用新密码登超管，看 profile：<code>flag{7f68e17e...}</code>，flag#9。验证越权最漂亮的方式就是改完密码从正门进去，整条链路自证。</p>
+<h2 id="第九步：SSO-信任链，谁能设那个头谁就是上帝"><a href="#第九步：SSO-信任链，谁能设那个头谁就是上帝" class="headerlink" title="第九步：SSO 信任链，谁能设那个头谁就是上帝"></a>第九步：SSO 信任链，谁能设那个头谁就是上帝</h2><p>超管的 dashboard 上挂着系统列表，点「Gitea 代码仓库」会触发单点登录。这里我建议不要真用浏览器点，用 curl 跟一遍 302：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">GET /sso/redirect?system=gitea</span><br><span class="line">→ 302 http://10.0.3.10:3000/sso/callback?token=...&amp;username=system&amp;role=superadmin</span><br></pre></td></tr></table></figure>
+
+<p>一眼就能看懂信任模型：SSO 侧把用户名和角色<strong>明文放在 URL 上</strong>，Gitea 前面的 sidecar 校验 role 之后发一个 <code>sso_auth</code> cookie，之后所有经过 sidecar 的请求都会被注入 <code>X-Webauth-User: system</code> 头，而 Gitea 开了 reverse-proxy 认证模式——<strong>无条件信任这个头，头写谁就登谁</strong>。</p>
+<p>所以这一关的本质是：拿到超管会话 &#x3D; 能领取 Gitea 上的任意身份。实际打三步：带 system 会话请求跳转拿 callback（token 就在里面），访问 callback 收 sidecar 发的 cookie，带 cookie 读私有仓库。中间还闹了个小乌龙：第一次只带 token 去 callback，sidecar 直接回 400——校验参数不全；把 <code>username</code> 和 <code>role</code> 补齐才 302。这个 400 反而把校验逻辑演示得明明白白。</p>
+<p><img src="/img/nkt/blog_08_gitea.png" alt="跳转拿 token → callback 补全参数拿 cookie → 读私有仓库，三步同框"></p>
+<p>最后带着 cookie 读 <code>system/infrastructure</code> 私有仓库里的 <code>secrets/flag.txt</code>：<code>flag{04f4df55...}</code>，flag#10，收官。十个 flag 齐了。</p>
+<h2 id="收尾与还原"><a href="#收尾与还原" class="headerlink" title="收尾与还原"></a>收尾与还原</h2><p>打完把官网首页模板用 git 对象里的原版覆盖回去（还是同样的穿越通道），验证 title 恢复正常；nacos 那边卸载挂载、清理临时文件。唯一的遗留是注入的内存马驻留在 Nacos 进程里，声明重启也存活，彻底清除得重建容器。</p>
+<h2 id="三点收获"><a href="#三点收获" class="headerlink" title="三点收获"></a>三点收获</h2><p><strong>一、凭据链是内网渗透的主旋律。</strong> 回头看整条链：application.yml 给了 Nacos 弱口令，Nacos 配置里翻了 MySQL 凭据，宿主机 config.txt 给了 Nexus 账号，jar 反编译给出 SSH 密码算法，SSH 配置里翻了 SSO 账号，SSO 超管会话换来了 Gitea 身份。每一关的钥匙都在上一关的抽屉里，内网渗透做的就是不断找”下一个凭据”。</p>
+<p><strong>二、任意文件写要挑”运行时会重读”的文件。</strong> 模板每次渲染必读、配置每次连接必读，覆盖即生效；启动期加载的代码改了等于没改。这个判断直接决定了文件写能不能升级成 RCE。</p>
+<p><strong>三、工具打不动 ≠ 打不动。</strong> 这次最花时间也最值钱的就是 Nacos 那段：本地 1:1 复现证明 payload 无误、差分探针定位执行短路点、读源码对出校验顺序、最后补上工具漏掉的字段。公开工具永远滞后于环境，会排查比会收集工具重要得多。</p>
+<h2 id="附：环境上踩的几个坑"><a href="#附：环境上踩的几个坑" class="headerlink" title="附：环境上踩的几个坑"></a>附：环境上踩的几个坑</h2><p>都是些跟渗透无关但很磨人的环境问题，一并记了：</p>
+<ul>
+<li>Windows 下有好几种 shell，行为差异巨大。PowerShell 里裸 <code>curl</code> 是 <code>Invoke-WebRequest</code> 的别名，curl 参数全不认，要用 <code>curl.exe</code>；<code>echo x &gt; file</code> 默认写 UTF-16 编码，写文本模板会坏，得 <code>Set-Content -Encoding ascii</code>。</li>
+<li>WSL 很好用，但<strong>内网地址从 WSL 直连不了</strong>（没有路由），别在本地环境里直接 curl 内网——这不是命令错，是命令发错了层。</li>
+<li>交互式 bash 里双引号包着 <code>!</code> 会触发历史展开（<code>event not found</code>），<code>set +H</code> 或者改单引号。</li>
+<li>引号嵌套是永恒的麻烦：命令一层套一层时，内层单引号会截断外层单引号，<code>&amp;</code> 还会把半条命令扔进后台。我的解法是把内层命令 base64 编码后中转，容器里 <code>base64 -d | sh</code> 执行，从此告别转义。</li>
+<li>WSL 里写脚本别放 <code>/mnt/c</code> 下，Windows 编辑器会给你写 CRLF 和 UTF-16，放 <code>~</code> 下省心。</li>
+</ul>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://woye969.github.io">Ro0t</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://woye969.github.io/2026/11/04/%E5%88%9D%E6%8E%A2%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F%EF%BC%9A%E4%BB%8E%E4%B8%80%E4%B8%AA.git%E6%B3%84%E9%9C%B2%E6%89%93%E5%88%B0%E5%86%85%E7%BD%91%E6%9C%80%E6%B7%B1%E5%A4%84/">https://woye969.github.io/2026/11/04/%E5%88%9D%E6%8E%A2%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F%EF%BC%9A%E4%BB%8E%E4%B8%80%E4%B8%AA.git%E6%B3%84%E9%9C%B2%E6%89%93%E5%88%B0%E5%86%85%E7%BD%91%E6%9C%80%E6%B7%B1%E5%A4%84/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://woye969.github.io" target="_blank">Ro0t's Blog</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F/">内网渗透</a><a class="post-meta__tags" href="/tags/Web%E5%AE%89%E5%85%A8/">Web安全</a><a class="post-meta__tags" href="/tags/Java%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96/">Java反序列化</a><a class="post-meta__tags" href="/tags/%E5%AE%B9%E5%99%A8%E9%80%83%E9%80%B8/">容器逃逸</a><a class="post-meta__tags" href="/tags/%E8%B6%8A%E6%9D%83/">越权</a><a class="post-meta__tags" href="/tags/SSO/">SSO</a></div><div class="post-share"><div class="social-share" data-image="/img/famicom-cover.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/11/03/%E9%87%91%E8%9E%8DAPK%E7%94%9F%E4%BA%A7%E7%8E%AF%E5%A2%83%E5%8D%8F%E8%AE%AE%E7%BA%A7%E5%AE%8C%E5%85%A8%E6%8E%A7%E5%88%B6%E5%A4%8D%E7%9B%98/" title="从一个 90MB 的金融类 APK 到生产环境协议级完全控制 —— 完整逆向实战复盘"><img class="cover" src="/img/famicom-cover.png" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">从一个 90MB 的金融类 APK 到生产环境协议级完全控制 —— 完整逆向实战复盘</div></div><div class="info-2"><div class="info-item-1"> 声明：本文基于一次已授权的移动应用安全评估项目整理。目标应用已做匿名化处理（下文称 “App X”），所有真实域名、密钥、用户数据均已脱敏或泛化。技术细节保留完整，仅供安全研究学习，请勿对未授权目标复现。  0. TL;DR目标是款预付卡&#x2F;钱包类金融 App（化名 App X）。从头到尾干下来，结果如下：  Java 层 16 项安全检测全量绕过（root &#x2F; Frida &#x2F; Xposed &#x2...</div></div></div></a></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Ro0t</div><div class="author-info-description">专注二进制安全、逆向分析与漏洞利用</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">17</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">25</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/woye969" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">这是Ro0t的博客，尽量会给师傅们更新一些有趣的网安知识，不定时更新。喜欢我的blog的点点赞❤</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%88%9D%E6%8E%A2%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F%EF%BC%9A%E4%BB%8E%E4%B8%80%E4%B8%AA-git-%E6%B3%84%E9%9C%B2%E6%89%93%E5%88%B0%E5%86%85%E7%BD%91%E6%9C%80%E6%B7%B1%E5%A4%84"><span class="toc-number">1.</span> <span class="toc-text">初探内网渗透：从一个 .git 泄露打到内网最深处</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%89%8D%E7%BD%AE%E7%9F%A5%E8%AF%86"><span class="toc-number">1.1.</span> <span class="toc-text">前置知识</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%B8%80%E6%AD%A5%EF%BC%9A%E4%BF%A1%E6%81%AF%E6%90%9C%E9%9B%86%EF%BC%8C%E5%85%88%E5%88%AB%E6%80%A5%E7%9D%80%E6%89%AB"><span class="toc-number">1.2.</span> <span class="toc-text">第一步：信息搜集，先别急着扫</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%BA%8C%E6%AD%A5%EF%BC%9A%E6%89%8B%E5%86%99-dumper-%E8%BF%98%E5%8E%9F%E6%BA%90%E7%A0%81"><span class="toc-number">1.3.</span> <span class="toc-text">第二步：手写 dumper 还原源码</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%B8%89%E6%AD%A5%EF%BC%9A%E5%AE%A1%E8%AE%A1%E6%BA%90%E7%A0%81%EF%BC%8C%E6%89%BE%E3%80%8C%E7%94%A8%E6%88%B7%E8%BE%93%E5%85%A5%E8%BF%9B%E5%8D%B1%E9%99%A9%E5%87%BD%E6%95%B0%E3%80%8D%E7%9A%84%E7%82%B9"><span class="toc-number">1.4.</span> <span class="toc-text">第三步：审计源码，找「用户输入进危险函数」的点</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E5%9B%9B%E6%AD%A5%EF%BC%9A%E5%86%85%E7%BD%91%E5%8F%91%E7%8E%B0%EF%BC%8CNacos-%E5%BC%B1%E5%8F%A3%E4%BB%A4"><span class="toc-number">1.5.</span> <span class="toc-text">第四步：内网发现，Nacos 弱口令</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%BA%94%E6%AD%A5%EF%BC%9AJraft-%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96%EF%BC%8C%E5%8D%A1%E4%BA%86%E6%88%91%E4%B8%80%E4%B8%AA%E5%B0%8F%E6%97%B6%E7%9A%84%E5%9C%B0%E6%96%B9"><span class="toc-number">1.6.</span> <span class="toc-text">第五步：Jraft 反序列化，卡了我一个小时的地方</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E5%85%AD%E6%AD%A5%EF%BC%9A%E7%89%B9%E6%9D%83%E5%AE%B9%E5%99%A8%E9%80%83%E9%80%B8"><span class="toc-number">1.7.</span> <span class="toc-text">第六步：特权容器逃逸</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%B8%83%E6%AD%A5%EF%BC%9A%E5%88%B6%E5%93%81%E5%BA%93%E9%87%8C%E7%BF%BB%E5%87%BA%E4%B8%80%E4%B8%AA%E2%80%9D%E5%AF%86%E7%A0%81%E7%94%9F%E6%88%90%E5%99%A8%E2%80%9D"><span class="toc-number">1.8.</span> <span class="toc-text">第七步：制品库里翻出一个”密码生成器”</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E5%85%AB%E6%AD%A5%EF%BC%9A%E5%9E%82%E7%9B%B4%E8%B6%8A%E6%9D%83%EF%BC%8C%E8%AE%A4%E8%AF%81%E4%B8%8D%E7%AD%89%E4%BA%8E%E6%8E%88%E6%9D%83"><span class="toc-number">1.9.</span> <span class="toc-text">第八步：垂直越权，认证不等于授权</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%B9%9D%E6%AD%A5%EF%BC%9ASSO-%E4%BF%A1%E4%BB%BB%E9%93%BE%EF%BC%8C%E8%B0%81%E8%83%BD%E8%AE%BE%E9%82%A3%E4%B8%AA%E5%A4%B4%E8%B0%81%E5%B0%B1%E6%98%AF%E4%B8%8A%E5%B8%9D"><span class="toc-number">1.10.</span> <span class="toc-text">第九步：SSO 信任链，谁能设那个头谁就是上帝</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%94%B6%E5%B0%BE%E4%B8%8E%E8%BF%98%E5%8E%9F"><span class="toc-number">1.11.</span> <span class="toc-text">收尾与还原</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E7%82%B9%E6%94%B6%E8%8E%B7"><span class="toc-number">1.12.</span> <span class="toc-text">三点收获</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%99%84%EF%BC%9A%E7%8E%AF%E5%A2%83%E4%B8%8A%E8%B8%A9%E7%9A%84%E5%87%A0%E4%B8%AA%E5%9D%91"><span class="toc-number">1.13.</span> <span class="toc-text">附：环境上踩的几个坑</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/11/04/%E5%88%9D%E6%8E%A2%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F%EF%BC%9A%E4%BB%8E%E4%B8%80%E4%B8%AA.git%E6%B3%84%E9%9C%B2%E6%89%93%E5%88%B0%E5%86%85%E7%BD%91%E6%9C%80%E6%B7%B1%E5%A4%84/" title="初探内网渗透：从一个 .git 泄露打到内网最深处"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初探内网渗透：从一个 .git 泄露打到内网最深处"/></a><div class="content"><a class="title" href="/2026/11/04/%E5%88%9D%E6%8E%A2%E5%86%85%E7%BD%91%E6%B8%97%E9%80%8F%EF%BC%9A%E4%BB%8E%E4%B8%80%E4%B8%AA.git%E6%B3%84%E9%9C%B2%E6%89%93%E5%88%B0%E5%86%85%E7%BD%91%E6%9C%80%E6%B7%B1%E5%A4%84/" title="初探内网渗透：从一个 .git 泄露打到内网最深处">初探内网渗透：从一个 .git 泄露打到内网最深处</a><time datetime="2026-11-04T12:00:00.000Z" title="发表于 2026-11-04 20:00:00">2026-11-04</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/03/%E9%87%91%E8%9E%8DAPK%E7%94%9F%E4%BA%A7%E7%8E%AF%E5%A2%83%E5%8D%8F%E8%AE%AE%E7%BA%A7%E5%AE%8C%E5%85%A8%E6%8E%A7%E5%88%B6%E5%A4%8D%E7%9B%98/" title="从一个 90MB 的金融类 APK 到生产环境协议级完全控制 —— 完整逆向实战复盘"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="从一个 90MB 的金融类 APK 到生产环境协议级完全控制 —— 完整逆向实战复盘"/></a><div class="content"><a class="title" href="/2026/11/03/%E9%87%91%E8%9E%8DAPK%E7%94%9F%E4%BA%A7%E7%8E%AF%E5%A2%83%E5%8D%8F%E8%AE%AE%E7%BA%A7%E5%AE%8C%E5%85%A8%E6%8E%A7%E5%88%B6%E5%A4%8D%E7%9B%98/" title="从一个 90MB 的金融类 APK 到生产环境协议级完全控制 —— 完整逆向实战复盘">从一个 90MB 的金融类 APK 到生产环境协议级完全控制 —— 完整逆向实战复盘</a><time datetime="2026-11-03T12:00:00.000Z" title="发表于 2026-11-03 20:00:00">2026-11-03</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/02/%E8%A7%A3%E5%89%96%E4%B8%80%E4%B8%AAFlutter%E6%94%AF%E4%BB%98%E9%92%B1%E5%8C%85/" title="解剖一个 Flutter 支付钱包：三层防护的失效史与全链路协议还原"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="解剖一个 Flutter 支付钱包：三层防护的失效史与全链路协议还原"/></a><div class="content"><a class="title" href="/2026/11/02/%E8%A7%A3%E5%89%96%E4%B8%80%E4%B8%AAFlutter%E6%94%AF%E4%BB%98%E9%92%B1%E5%8C%85/" title="解剖一个 Flutter 支付钱包：三层防护的失效史与全链路协议还原">解剖一个 Flutter 支付钱包：三层防护的失效史与全链路协议还原</a><time datetime="2026-11-02T13:00:00.000Z" title="发表于 2026-11-02 21:00:00">2026-11-02</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/11/02/Flutter%E5%95%86%E6%88%B7%E6%94%AF%E4%BB%98App%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91/" title="记一次 Flutter 商户支付 App 的全链路协议逆向 —— 从三层检测到&quot;当日流水&quot;破案实录"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="记一次 Flutter 商户支付 App 的全链路协议逆向 —— 从三层检测到&quot;当日流水&quot;破案实录"/></a><div class="content"><a class="title" href="/2026/11/02/Flutter%E5%95%86%E6%88%B7%E6%94%AF%E4%BB%98App%E5%8D%8F%E8%AE%AE%E9%80%86%E5%90%91/" title="记一次 Flutter 商户支付 App 的全链路协议逆向 —— 从三层检测到&quot;当日流水&quot;破案实录">记一次 Flutter 商户支付 App 的全链路协议逆向 —— 从三层检测到&quot;当日流水&quot;破案实录</a><time datetime="2026-11-02T12:00:00.000Z" title="发表于 2026-11-02 20:00:00">2026-11-02</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/29/%E6%9F%90%E5%8D%B0%E5%BA%A6%E9%87%91%E8%9E%8DApp%E9%80%86%E5%90%91%E5%AE%9E%E5%BD%95%EF%BC%9A%E6%A3%80%E6%B5%8B%E4%BD%93%E7%B3%BB%E3%80%81%E5%8D%8F%E8%AE%AE%E8%BF%98%E5%8E%9F%E4%B8%8E%E9%87%8D%E6%89%93%E5%8C%85/" title="某印度金融 App 逆向实录：检测体系逐个拆、协议全还原、重打包一条龙"><img src="/img/famicom-cover.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="某印度金融 App 逆向实录：检测体系逐个拆、协议全还原、重打包一条龙"/></a><div class="content"><a class="title" href="/2026/10/29/%E6%9F%90%E5%8D%B0%E5%BA%A6%E9%87%91%E8%9E%8DApp%E9%80%86%E5%90%91%E5%AE%9E%E5%BD%95%EF%BC%9A%E6%A3%80%E6%B5%8B%E4%BD%93%E7%B3%BB%E3%80%81%E5%8D%8F%E8%AE%AE%E8%BF%98%E5%8E%9F%E4%B8%8E%E9%87%8D%E6%89%93%E5%8C%85/" title="某印度金融 App 逆向实录：检测体系逐个拆、协议全还原、重打包一条龙">某印度金融 App 逆向实录：检测体系逐个拆、协议全还原、重打包一条龙</a><time datetime="2026-10-29T12:00:00.000Z" title="发表于 2026-10-29 20:00:00">2026-10-29</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Ro0t</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div><div class="footer_custom_text">Ro0t · Binary Security Blog</div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script defer src="/js/kof-pet.js?v=mai2"></script><script defer src="/js/like.js?v=1"></script></div></body></html>
